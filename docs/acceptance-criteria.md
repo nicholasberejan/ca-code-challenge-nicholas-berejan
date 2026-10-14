@@ -31,10 +31,12 @@ feature begins.
 - Running the migration multiple times does not create duplicate records.
 - Re-running the migration produces deterministic results for
   source-controlled data.
-- **TBD:** behavior when locally editable data differs from WordPress
-  source data.
-- **TBD:** behavior when a previously imported WordPress entity no longer
-  exists in the source.
+- Split fields by owner. WordPress owns `title`, `content`, ACF fields, `industry`, and `reviews`. 
+  Overwrite on each import. Django owns `short_description`. Import sets it only when it creates 
+  a brand and never overwrites it after that.
+- Report, don't delete when a previously imported WordPress entity no longer
+  exists in the source. After import finishes, print brands and reviews that exist in Django but are
+  missing from WordPress. Add a `--prune` flag on import to clean django data.
 
 ### Server-Rendered Pages
 
@@ -65,11 +67,30 @@ feature begins.
   - review count
   - short description
   - top review snippet
-
-- **TBD:** authoritative source/calculation for average rating.
-- **TBD:** definition and initialization of short description.
-- **TBD:** definition of "top review."
-- **TBD:** exact filtering, sorting, pagination, and error-response
+- Average rating is derived from review ratings, API returns mean rounded to one decimal
+  while sorting uses unrounded decimal. No reviews returns `null` and sorts last. Use slug
+  for tie breaking. Cache and store, recalculating on write or import. Keep `average_rating` value
+  from WordPress as `legacy_average_rating` for auditing.
+- `short_description` editable text field is seeded from `post_excerpt` value in WordPress data (if present)
+  If not present, use ~22 words of `post_content` value (cleaned and stripped of tags)
+    - PATCH validation:
+        - must be a non-empty string;
+        - maximum length enforced (about 300 characters);
+        - surrounding whitespace trimmed;
+        - HTML treated as text.
+- "Top Review" is determined by the most representative review, that which is closest to the brand's derived average of review scores.
+    - Ties are broken by:
+        - lower rating of the two
+        - then the most recent
+        - then the WordPress ID
+    - The snippet includes review slug, title, rating, reviewer name, and roughly the first 160 characters of plain-text body.
+    - A brand with no reviews returns null.
+- Filter, sort, pagination, and errors:
+  - Filter: industry=<slug>, repeatable. An unknown slug returns 400, because industries are a closed, known set. 
+    Should accept one filter value (as there are only currently five industries)
+  - Sort: ordering=average_rating|-average_rating|review_count|-review_count. Default is -average_rating, with slug as the tie-break.
+  - Pagination: page and page_size (default 12, maximum 50). The envelope is {count, next, previous, results}.
+  - Errors: an invalid parameter returns 400 with {"errors": {"<param>": ["..."]}}. An out-of-range page returns 404.
   contracts.
 
 ### Protected Brand Update
@@ -100,9 +121,14 @@ A write endpoint for editing a brand's short description:
 - uses appropriate semantic HTML.
 - meets basic accessibility expectations.
 - is usable on mobile and desktop viewport sizes.
-- **TBD:** filter cardinality.
+- includes a single-select `<select>` element with an "All industries" option. 
+  The API still accepts repeated values for future expansion to multi-select.
 - **TBD:** pagination interaction.
-- **TBD:** URL synchronization behavior.
+- URL synchronization behavior:
+  - Filter, sort and page live in the query string with the same names as the API, and default values are omitted.
+  - User changes pushState a new history entry; popstate re-reads the URL.
+  - Invalid URL values fall back to defaults instead of erroring.
+  - Observable: a deep link reproduces the view, and Back restores the previous filter.
 
 ## 4. SCSS
 
@@ -146,9 +172,12 @@ A write endpoint for editing a brand's short description:
 - The auth service is authoritative for role/permission assignments.
 - An editor can call the protected brand-update endpoint.
 - A reader cannot call the protected brand-update endpoint.
-- **TBD:** WordPress-role-to-application-role mapping.
+- WordPress-role-to-application-role mapping: "administrator" becomes "editor", "subscriber" becomes "reader".
+  Unknown roles map to "reader". Only "editor" role can PATCH.
 - **TBD:** token revocation and role-change propagation behavior.
-- **TBD:** behavior when the auth service is unavailable.
+- When auth service is unavailable, public GET endpoints and server-rendered pages are unaffected.
+  PATCH with a valid, unexpired token still succeeds. Login fails. If main app cannot get verification key at all, PATCH returns 503
+  instead of 401 to avoid reporting infrastructure failure as bad credentials.
 
 ## 6. Shared Python Library
 
