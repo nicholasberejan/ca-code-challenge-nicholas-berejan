@@ -119,3 +119,24 @@ ACF fields are exposed natively via `show_in_rest: true` set in `wp-content/mu-p
 - `wp-content/plugins/akismet/` and `hello.php` are WP defaults — left in place but inactive.
 - The site URL is hardcoded as `http://localhost:8080` in the dump (in `wp_options.siteurl` and `home`). Changing the port requires a search/replace in `db/dump.sql` before commit, or just override via `WP_HOME` / `WP_SITEURL` constants.
 - `_yoast_wpseo_*` postmeta is seeded for brand posts only.
+
+## Migrating WordPress data into Django
+
+> **TODO (implementation):** Write this section once the import commands exist.
+> Service names below (`web`, `auth`) are provisional until the Compose wiring is decided.
+>
+> - Prerequisites: `docker compose up -d` (only the `db` service is required for import).
+> - Main app: `docker compose exec web python manage.py import_wordpress`
+>   (industries, brands, reviewers, reviews).
+> - Auth service: `docker compose exec auth python manage.py import_wordpress_users`
+>   (users, WordPress password hashes, roles: `administrator` → `editor`, `subscriber` → `reader`).
+> - `make import` wrapper; the two commands are independent and can run in either order.
+> - Connection settings: `WP_DB_HOST`, `WP_DB_NAME`, `WP_DB_USER`, `WP_DB_PASSWORD` (read over the Compose network at `db:3306`).
+> - Re-run behaviour: upsert keyed on WordPress IDs; one transaction per run; WordPress-owned
+>   fields overwritten; `short_description` set only on first creation; brand industries replaced
+>   to match source; entities missing from source reported, not deleted; summary of
+>   created / updated / unchanged / missing.
+> - Scope: published content only; dates from `post_date_gmt` (UTC); a changed WordPress slug
+>   updates our slug (old URL breaks; no redirects).
+> - Production note: use a read-only DB user or a replica.
+> - Scaling note: batched reads + `bulk_create(update_conflicts=True)` at 100x data.
