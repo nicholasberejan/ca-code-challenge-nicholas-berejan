@@ -123,7 +123,7 @@ ACF fields are exposed natively via `show_in_rest: true` set in `wp-content/mu-p
 ## Migrating WordPress data into Django
 
 > **TODO (implementation):** Write this section once the import commands exist.
-> Service names below (`web`, `auth`) are provisional until the Compose wiring is decided.
+> Service names `web` and `auth` are final (see `docs/decisions.md` §13).
 >
 > - Prerequisites: `docker compose up -d` (only the `db` service is required for import).
 > - Main app: `docker compose exec web python manage.py import_wordpress`

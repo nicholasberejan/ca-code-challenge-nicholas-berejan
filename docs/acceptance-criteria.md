@@ -21,6 +21,9 @@ feature begins.
 - Industry relationships are preserved.
 - Reviewer identity from the source data is preserved in an appropriate
   form.
+- Every imported brand, review, reviewer and industry records its WordPress
+  ID as a unique source identity, separate from its Django primary key and
+  from its slug.
 - A brand can belong to more than one industry (many-to-many), even though
   every seeded brand has exactly one.
 - Each WordPress user who authored a review becomes a `Reviewer` (WordPress
@@ -45,28 +48,46 @@ feature begins.
 - Running the migration multiple times does not create duplicate records.
 - Re-running the migration produces deterministic results for
   source-controlled data.
-- Split fields by owner. WordPress owns `title`, `content`, ACF fields, `industry`, and `reviews`. 
-  Overwrite on each import. Django owns `short_description`. Import sets it only when it creates 
-  a brand and never overwrites it after that.
-- Report, don't delete when a previously imported WordPress entity no longer
-  exists in the source. After import finishes, print brands and reviews that exist in Django but are
-  missing from WordPress. Add a `--prune` flag on import to clean django data.
+- Re-running the import against unchanged source data creates and updates
+  nothing.
+- Imported rows are matched to their source by WordPress ID, not slug. If a
+  WordPress slug changes, the next run updates the existing Django entity's
+  slug; no duplicate entity is created, and the old URL is not redirected.
+- Split fields by owner. WordPress owns title, content, slug, ACF fields,
+  industries, and reviews; they are overwritten on each import. Django owns
+  `short_description`: import sets it only when it creates a brand and never
+  overwrites it after that, so an edit made through the PATCH endpoint
+  survives re-import.
+- A brand's industries are replaced to match the source on every run.
 - The import reads the WordPress MariaDB database directly. The main app's
   `import_wordpress` imports industries, brands, reviewers and reviews; the
   auth service's `import_wordpress_users` imports users, password hashes and
   roles. The two commands are independent and can run in either order.
 - Each import runs in a single transaction: a failure leaves no partially
   imported data.
-- Imported rows are matched to their source by WordPress ID.
 - Only published WordPress content is migrated.
 - Dates are taken from `post_date_gmt` and stored in UTC.
-- A brand's industries are replaced to match the source on every run.
-- A changed WordPress slug updates the Django slug on the next run; the old
-  URL is not redirected.
+- A review whose brand is not in the imported source is skipped and
+  reported.
 - The import prints a summary of created, updated, unchanged and missing
   records, and reports any review whose `reviewer_name` differs from its
   author's display name.
 - The import never writes to the WordPress database.
+
+### Missing Source Entities and Pruning
+
+- By default, brands, reviews, industries and reviewers that exist in Django
+  but are missing from WordPress are reported after import and not deleted.
+- With an explicit `--prune` flag, within the same transaction as the
+  import:
+  - a review missing from the source is deleted;
+  - a brand missing from the source is deleted together with its reviews;
+  - an industry missing from the source is deleted and no longer offered as
+    a filter option;
+  - a reviewer left with no reviews is deleted.
+- Without `--prune`, reviewers left with no reviews are reported.
+- The auth service's user import never deletes users; users missing from
+  the source are reported.
 
 ### Server-Rendered Pages
 
@@ -77,17 +98,21 @@ feature begins.
 - Requests for nonexistent brand or review slugs return an appropriate
   404 response.
 - Recent-review ordering is deterministic.
-- Brand and review body HTML is stored exactly as in WordPress and cleaned
-  when rendered by a single `|clean_html` template filter (nh3):
-  - only allowlisted tags survive (`p`, `br`, `strong`, `em`, `a`, `ul`,
-    `ol`, `li`, `blockquote`, `h2`–`h4`), and the only allowed attribute is
-    `href` on links;
-  - `<script>`, event-handler attributes and `style` never appear in the
-    output;
-  - links may only use `http`, `https` or `mailto`; `javascript:` links are
-    removed;
-  - this filter is the only place stored HTML is marked safe, and tests
-    cover known XSS payloads.
+
+### HTML Sanitization
+
+- Brand and review body HTML is sanitized during import, before it is
+  stored, by a single sanitizer that is tested against representative XSS
+  payloads.
+- Stored and rendered body HTML contains only allowlisted tags (`p`, `br`,
+  `strong`, `em`, `a`, `ul`, `ol`, `li`, `blockquote`, `h2`–`h4`); the only
+  allowed attribute is `href` on links.
+- `<script>`, event-handler attributes and `style` never appear in stored or
+  rendered body HTML.
+- Links may only use `http`, `https` or `mailto`; `javascript:` links are
+  removed.
+- No unsanitized external HTML is ever marked safe. All other text fields,
+  including `short_description`, are escaped when rendered.
 
 ## 2. Brand REST API
 
@@ -108,33 +133,59 @@ feature begins.
   - review count
   - short description
   - top review snippet
-- Average rating is derived from review ratings, API returns mean rounded to one decimal
-  while sorting uses unrounded decimal. No reviews returns `null` and sorts last. Use slug
-  for tie breaking. Calculated per request; a stored copy can be added later if scale requires it. Keep `average_rating` value
-  from WordPress as `legacy_average_rating` for auditing.
-- `short_description` editable text field is seeded from `post_excerpt` value in WordPress data (if present)
-  If not present, use ~22 words of `post_content` value (cleaned and stripped of tags)
-    - PATCH validation:
-        - must be a non-empty string;
-        - maximum length 300 characters (after trimming);
-        - surrounding whitespace trimmed;
-        - HTML treated as text.
-- "Top Review" is determined by the most representative review, that which is closest to the brand's derived average of review scores.
-    - Ties are detected exactly (integer arithmetic, not floats) and broken by:
-        - lower rating of the two
-        - then the most recent
-        - then the WordPress ID
-    - The snippet includes review slug, title, rating, reviewer name, and roughly the first 160 characters of plain-text body.
-    - A brand with no reviews returns null.
-- Filter, sort, pagination, and errors:
-  - Filter: industry=<slug>, repeatable. An unknown slug returns 400, because industries are a closed, known set.
-  - Sort: ordering=average_rating|-average_rating|review_count|-review_count. Default is -average_rating, with slug as the tie-break.
-  - Pagination: page and page_size (default 12, maximum 50). The envelope is {count, next, previous, results}.
-  - Errors: an invalid parameter returns 400 with {"errors": {"<param>": ["..."]}}. An out-of-range page returns 404.
-- Filtering by several industries returns brands in any of them. A brand in
-  more than one selected industry appears once, and its review count and
-  average rating are not inflated.
-- `legacy_average_rating` is not returned by the API.
+
+### Average Rating
+
+- Average rating is derived from the brand's review ratings and calculated
+  per request; a stored copy can be added later if scale requires it.
+- `average_rating` is a JSON number rounded to two decimal places (e.g.
+  `3.92`), or `null` for a brand with no reviews.
+- Sorting by average rating uses the unrounded derived value. Brands with no
+  reviews sort last in either direction. Ties are broken by slug.
+- The WordPress `average_rating` value is retained as
+  `legacy_average_rating` for source/audit reference only. It is not
+  returned by the API and is not used for display, sorting or any other API
+  behavior.
+
+### Short Description
+
+- `short_description` is seeded from `post_excerpt` in the WordPress data
+  when present; otherwise from ~22 words of `post_content` with tags
+  stripped and entities decoded.
+
+### Top Review
+
+- The top review is the review whose rating is closest to the brand's
+  derived average rating (smallest absolute distance).
+- Only when two reviews are equally distant from the average is the lower
+  rating preferred. Examples:
+  - average 3.6, candidate ratings 3 and 4: the 4 is selected (it is
+    closer).
+  - average 3.5, candidate ratings 3 and 4: the 3 is selected (equally
+    distant; lower wins).
+- Remaining ties are broken by the most recent review, then by WordPress
+  post ID.
+- Equal distances are recognised exactly; selection is not affected by
+  floating-point rounding.
+- The snippet includes review slug, title, rating, reviewer name, and
+  roughly the first 160 characters of plain-text body.
+- A brand with no reviews returns `null`.
+
+### Filter, Sort, Pagination and Errors
+
+- Filter: `industry=<slug>`, repeatable. Brands in any of the given
+  industries are returned. An unknown slug returns 400.
+- Sort: `ordering=average_rating|-average_rating|review_count|-review_count`.
+  Default is `-average_rating`, with slug as the tie-break.
+- Pagination: `page` and `page_size` (default 12, maximum 50). The envelope
+  is `{count, next, previous, results}`.
+- Errors: an invalid parameter returns 400 with
+  `{"errors": {"<param>": ["..."]}}`. An out-of-range page returns 404.
+- Filtering by several industries never duplicates a brand or inflates its
+  aggregates. Example: a brand belonging to both Industry A and Industry B,
+  with 12 reviews, requested with `industry=a&industry=b`, appears exactly
+  once, with `review_count` 12 (not 24) and `average_rating` equal to the
+  actual average of its 12 reviews.
 
 ### Industries
 
@@ -154,10 +205,13 @@ A write endpoint for editing a brand's short description:
 - allows a user with editor permission to update the short description.
 - does not permit modification of fields outside the endpoint's intended
   scope.
+- validates `short_description`:
+  - must be a non-empty string;
+  - maximum length 300 characters (after trimming);
+  - surrounding whitespace trimmed;
+  - HTML treated as text.
 - leaves public GET endpoints and server-rendered pages accessible without
   authentication.
-- records every successful update in an audit log: the user (token `sub`),
-  token ID (`jti`), timestamp, and the before and after values.
 
 ## 3. React BrandList
 
@@ -171,6 +225,7 @@ A write endpoint for editing a brand's short description:
 - handles API/error state.
 - renders brand information returned by the API.
 - shows one industry badge per industry on each card, sorted by name.
+- displays each brand's average rating formatted to one decimal place.
 - populates the industry filter from `GET /api/industries/`.
 - supports keyboard interaction for interactive controls.
 - uses appropriate semantic HTML.
@@ -181,8 +236,9 @@ A write endpoint for editing a brand's short description:
   global store, context provider, or data-fetching library.
 - never shows results from an older request after a newer one has been made
   (in-flight requests are aborted when parameters change).
-- includes a single-select `<select>` element with an "All industries" option. 
-  The API still accepts repeated values for future expansion to multi-select.
+- includes a single-select `<select>` element with an "All industries"
+  option. The API still accepts repeated values for future expansion to
+  multi-select.
 - Pagination interaction:
   - Previous and Next buttons with a "Page X of Y" label; a button is disabled
     (not hidden) when there is no page in that direction.
@@ -225,9 +281,8 @@ A write endpoint for editing a brand's short description:
 
 - Authentication and authorization run in a separate Django service.
 - The auth service has its own database.
-- Each service uses its own PostgreSQL database in its own container
-  (`main-db`, `auth-db`), so either can fail independently. Tests run
-  against PostgreSQL.
+- Each service has its own PostgreSQL database in its own container
+  (`main-db`, `auth-db`). Tests run against PostgreSQL.
 - The main application does not store passwords.
 - The main application does not own user roles or permissions.
 - The main application never sees passwords or refresh tokens.
@@ -237,10 +292,13 @@ A write endpoint for editing a brand's short description:
 - WordPress users exist in the auth service after migration.
 - Re-running user migration does not create duplicate users.
 - The chosen password migration/reset behavior is documented.
-- WordPress `$wp$` password hashes are copied as-is. Migrated users log in
-  with their existing WordPress passwords; a wrong password is rejected.
-- After a successful login, the password is re-hashed with Django's
-  hasher.
+- Migrated users can log in with their existing WordPress passwords (the
+  `$wp$` format present in the source data); an incorrect password is
+  rejected.
+- After a user's first successful login, their stored password hash is
+  upgraded to Django's native hasher, and later logins with the same
+  password still succeed.
+- Tests cover these behaviors using known source credentials.
 
 ### Authentication
 
@@ -267,12 +325,14 @@ A write endpoint for editing a brand's short description:
   reloads the user from the auth database, refuses inactive users, and
   builds the new access token's roles from the user's current roles (never
   copied from the old token).
-- A demoted or deactivated user can act for at most one access-token
-  lifetime (about 5 minutes). Observable: log in as an editor, demote the
-  user, refresh; the new access token has no editor role and PATCH returns
-  403.
-- When auth service is unavailable, public GET endpoints and server-rendered pages are unaffected.
-  PATCH with a valid, unexpired token still succeeds. Login and refresh fail.
+- An already-issued access token keeps its roles until it expires, so a
+  demoted or deactivated user can act for at most one access-token lifetime
+  (about 5 minutes). This is an accepted, documented tradeoff. Observable:
+  log in as an editor, demote the user, refresh; the new access token has no
+  editor role and PATCH returns 403.
+- When the auth service is unavailable, public GET endpoints and
+  server-rendered pages are unaffected. PATCH with a valid, unexpired token
+  still succeeds. Login and refresh fail.
 - The main app receives the auth service's public key through
   configuration at deploy time and never fetches it from the auth service
   at runtime. If the key is missing, the main app fails at startup with a
@@ -283,8 +343,9 @@ A write endpoint for editing a brand's short description:
 - Shared code is implemented as a separate installable Python package.
 - The package has its own `pyproject.toml`.
 - Both Django services install a defined version of the package.
-- The package contains only functionality genuinely shared by the
-  services.
+- The package contains only cross-service contracts and the authentication
+  infrastructure CHALLENGE.md requires there; each module's place in it is
+  justified in the documentation.
 - Shared authentication/token functionality required by the main
   application is provided through the package.
 - Shared permission-checking functionality required by the main
@@ -292,10 +353,12 @@ A write endpoint for editing a brand's short description:
 - The package has tests that run independently of either Django project.
 - Package installation/versioning and upgrade behavior are documented.
 - The package defines the token contract (claim names, issuer/audience,
-  signing algorithm) and role/permission names in one place.
-- The core (claims, permissions, token verification) is plain Python plus
-  PyJWT with no Django dependency. DRF authentication and permission
-  classes live in an optional submodule.
+  signing algorithm) and role/permission names in one place; the auth
+  service issues tokens and the main app verifies them using these same
+  definitions.
+- The core (claims, permissions, token verification) has no Django
+  dependency. DRF authentication and permission classes are an optional
+  part of the package.
 - The auth service installs only the core; the main app installs the core
   plus the DRF classes. Token signing stays in the auth service.
 - Core tests run with pytest alone; the DRF classes are tested with a
@@ -320,8 +383,9 @@ README documents:
 - how to run the shared library tests.
 - how shared-library versions reach each service.
 - how to run the WordPress migration.
-- how safely re-running the migration behaves.
-- how to compile SCSS.
+- how safely re-running the migration behaves, including `--prune`.
+- how to compile SCSS (via the Vite build).
+- how to run the verification scripts.
 - important modeling and architectural decisions.
 - what would be done differently with additional time.
 - any places where an AI-generated default was deliberately retained over
@@ -340,3 +404,17 @@ Before the assessment is considered complete:
 - migration idempotency has been verified.
 - the documented local-development workflow can start the required
   services.
+- `scripts/verify-fast.sh` passes: ruff (lint and format), mypy (strict) on
+  the shared library, shared-library tests, `tsc --noEmit`, ESLint (with
+  jsx-a11y), Prettier, Stylelint, and Vitest.
+- `scripts/verify.sh` passes: everything in the fast script, plus both
+  Django test suites on PostgreSQL, `makemigrations --check`, `vite build`
+  (including SCSS), and an import idempotency check in which a second run of
+  both imports creates and updates nothing.
+- All verification runs inside containers; only Docker is required on the
+  host.
+- `make up` starts the WordPress source, both Django services, both
+  PostgreSQL databases, and generates development keys if missing. The main
+  app starts and serves public pages when the auth service is not running.
+- Only the auth service has access to the private signing key; the main app
+  container has only the public key.
