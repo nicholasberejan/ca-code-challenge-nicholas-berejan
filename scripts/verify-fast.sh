@@ -10,4 +10,5 @@ shared_auth_tests
 frontend_static_checks
 frontend_tests
 
+finish_step
 printf '\nFast verification passed.\n'

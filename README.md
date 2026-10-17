@@ -51,6 +51,8 @@ make verify        # everything: + Django tests on PostgreSQL, Django checks, pr
 make test          # every test suite
 ```
 
+The commit hook is quiet: one line per check, plus the output of any check that fails. For full output, run `VERIFY_VERBOSE=1 git commit ...`.
+
 All checks run in containers. `make verify` lists checks that are deferred until their feature exists (currently: WordPress import idempotency); deferred checks are reported, never counted as passed.
 
 ### Frontend and SCSS

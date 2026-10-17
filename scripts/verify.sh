@@ -14,5 +14,6 @@ django_tests
 frontend_build
 report_deferred
 
+finish_step
 printf '\nFull verification passed (%d check(s) deferred, listed above).\n' \
   "${#DEFERRED_CHECKS[@]}"

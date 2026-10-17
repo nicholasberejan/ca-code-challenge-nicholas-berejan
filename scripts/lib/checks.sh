@@ -8,25 +8,61 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
+# VERIFY_QUIET=1 (set by .githooks/pre-commit): print one line per check and
+# show a command's output only if it fails. Otherwise stream everything.
+VERIFY_QUIET="${VERIFY_QUIET:-0}"
+step_open=0
+
 step() {
-  printf '\n==> %s\n' "$*"
+  if [ "$VERIFY_QUIET" = 1 ]; then
+    finish_step
+    printf '• %s ... ' "$*"
+    step_open=1
+  else
+    printf '\n==> %s\n' "$*"
+  fi
+}
+
+# Quiet mode: mark the current check as passed. Call before a final summary.
+finish_step() {
+  if [ "$step_open" = 1 ]; then
+    printf '✓\n'
+    step_open=0
+  fi
+}
+
+run() {
+  if [ "$VERIFY_QUIET" != 1 ]; then
+    "$@"
+    return
+  fi
+  local output status=0
+  output="$(mktemp)"
+  "$@" >"$output" 2>&1 || status=$?
+  if [ "$status" -ne 0 ]; then
+    printf '✗\n\n'
+    cat "$output"
+    step_open=0
+  fi
+  rm -f "$output"
+  return "$status"
 }
 
 # Run a one-off command in a Compose service. --no-deps: the fast checks never
 # start a database.
 in_service() {
-  docker compose --profile tools run --rm --no-deps -T "$@"
+  run docker compose --profile tools run --rm --no-deps -T "$@"
 }
 
 # As above, but starts the service's database first (waiting for it to be
 # healthy).
 in_service_with_db() {
-  docker compose run --rm -T "$@"
+  run docker compose run --rm -T "$@"
 }
 
 build_images() {
   step "Build images (web image includes the production frontend build)"
-  docker compose --profile tools build --quiet web auth frontend shared-auth
+  run docker compose --profile tools build --quiet web auth frontend shared-auth
 }
 
 # --- Python ------------------------------------------------------------------
@@ -99,6 +135,7 @@ DEFERRED_CHECKS=(
 )
 
 report_deferred() {
+  finish_step
   printf '\n==> Deferred checks (NOT run, NOT passed)\n'
   for check in "${DEFERRED_CHECKS[@]}"; do
     printf '    - %s\n' "$check"
