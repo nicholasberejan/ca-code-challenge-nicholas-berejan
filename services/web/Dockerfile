@@ -24,6 +24,12 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# mysqlclient (read-only WordPress source connection) builds from source
+# against the MariaDB client library.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc pkg-config libmariadb-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /repo/services/web
 COPY wheels/ /repo/wheels/
 COPY services/web/pyproject.toml services/web/uv.lock ./

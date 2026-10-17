@@ -115,6 +115,7 @@ make wp ARGS="plugin list"   # run wp-cli inside the stack
 make bootstrap  # full re-seed: WP core install + plugin install + content seed
 make dump       # export the current DB to db/dump.sql
 make status     # show running services
+make import     # import WordPress content into the main app (see "Migrating WordPress data")
 make hooks      # enable git hooks (once per clone)
 make verify-fast / make verify / make test   # see "Verification" above
 make lib-release / make lock                 # see "Shared library" above
@@ -182,21 +183,31 @@ ACF fields are exposed natively via `show_in_rest: true` set in `wp-content/mu-p
 
 ## Migrating WordPress data into Django
 
-> **TODO (implementation):** Write this section once the import commands exist.
-> Service names `web` and `auth` are final (see `docs/decisions.md` §13).
->
-> - Prerequisites: `docker compose up -d` (only the `db` service is required for import).
-> - Main app: `docker compose exec web python manage.py import_wordpress`
->   (industries, brands, reviewers, reviews).
-> - Auth service: `docker compose exec auth python manage.py import_wordpress_users`
->   (users, WordPress password hashes, roles: `administrator` → `editor`, `subscriber` → `reader`).
-> - `make import` wrapper; the two commands are independent and can run in either order.
-> - Connection settings: `WP_DB_HOST`, `WP_DB_NAME`, `WP_DB_USER`, `WP_DB_PASSWORD` (read over the Compose network at `db:3306`).
-> - Re-run behaviour: upsert keyed on WordPress IDs; one transaction per run; WordPress-owned
->   fields overwritten; `short_description` set only on first creation; brand industries replaced
->   to match source; entities missing from source reported, not deleted; summary of
->   created / updated / unchanged / missing.
-> - Scope: published content only; dates from `post_date_gmt` (UTC); a changed WordPress slug
->   updates our slug (old URL breaks; no redirects).
-> - Production note: use a read-only DB user or a replica.
-> - Scaling note: batched reads + `bulk_create(update_conflicts=True)` at 100x data.
+The main app's `import_wordpress` command copies published WordPress content (industries, brands, reviewers, reviews) into the `web` service's PostgreSQL database. It reads the WordPress MariaDB (`db` service) directly over the Compose network, using `WP_DB_HOST`, `WP_DB_NAME`, `WP_DB_USER` and `WP_DB_PASSWORD` from `.env`. The WordPress database is needed only while the command runs; the `web` service starts without it.
+
+```bash
+docker compose up -d db web                                      # WordPress source + main app
+make import                                                       # = the command below
+docker compose exec web python manage.py import_wordpress         # import / re-import
+docker compose exec web python manage.py import_wordpress --prune # also delete what WordPress no longer has
+```
+
+The command prints a summary of created / updated / unchanged / missing rows per entity, plus any reviews it skipped, reviewer-name mismatches and unrecognised postmeta keys.
+
+**Re-running is safe.**
+
+- Rows are matched by their WordPress ID, never by slug. A slug changed in WordPress updates the existing row (the old URL stops working; there are no redirects).
+- WordPress-owned fields (titles, content, slugs, ACF values, ratings, industries, authors) are overwritten when they differ. Unchanged rows are not written, so a second run against unchanged WordPress data reports nothing created or updated.
+- `short_description` is set only when a brand is first imported (from the excerpt, or the first 22 words of the content). After that it belongs to Django: re-imports never overwrite it.
+- Each run is one transaction: if anything fails, nothing from that run is saved.
+- Content that exists in Django but no longer in WordPress is reported and kept. `--prune` deletes it: missing reviews, missing brands with their reviews, missing industries, and reviewers left with no reviews. A review whose brand is no longer imported (unpublished or deleted) is skipped and counts as missing: like other missing rows, its existing copy is kept unchanged (on its previous brand) and reported until `--prune` deletes it.
+- If WordPress gives a slug to a new post while the row that held it is missing (and kept), the import stops with a message naming both posts; re-run with `--prune` to delete the missing row.
+- Only published content is imported; dates come from `post_date_gmt` (UTC).
+
+**HTML is sanitized at import.** Brand and review bodies are stored only after passing through one allowlist sanitizer (`content/sanitize.py`): `p`, `br`, `strong`, `em`, `a` (`href` only; `http`, `https`, `mailto`), `ul`, `ol`, `li`, `blockquote`, `h2`–`h4`. Scripts, event handlers, styles and `javascript:` links never reach the database.
+
+**WordPress is never written.** The `wordpress` connection is opened as a read-only session, so writes are rejected even though the local `wp` database user could write, and a database router keeps migrations and models off it. In production, use a read-only database user or a replica.
+
+**Scaling.** At 100x the data, the plan is batched reads and `bulk_create(update_conflicts=True)` instead of per-row writes; at the current size, straightforward per-row upserts are clearer.
+
+> **Not implemented yet:** the auth service's `import_wordpress_users` (users, password hashes, roles). `make import` will run both commands once it exists.

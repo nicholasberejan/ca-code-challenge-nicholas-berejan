@@ -96,11 +96,29 @@ django_checks() {
   done
 }
 
+# The WordPress source database (MariaDB `db` service): read by the web
+# service's import tests and by the import idempotency check.
+start_wordpress_db() {
+  step "Start the WordPress source database"
+  run docker compose up -d --wait db
+}
+
 django_tests() {
+  start_wordpress_db
   for service in web auth; do
     step "pytest against PostgreSQL: services/$service"
     in_service_with_db "$service" pytest
   done
+}
+
+# Imports the seeded WordPress content into the web service's database, then
+# re-imports with --expect-unchanged, which fails (and rolls back) if the
+# second run would create, update or delete anything.
+content_import_idempotency() {
+  start_wordpress_db
+  step "WordPress content import, then idempotent re-import (import_wordpress)"
+  in_service_with_db web python manage.py import_wordpress
+  in_service_with_db web python manage.py import_wordpress --expect-unchanged
 }
 
 # --- Frontend ----------------------------------------------------------------
@@ -128,10 +146,11 @@ frontend_build() {
 
 # --- Deferred ----------------------------------------------------------------
 
-# The import idempotency check (docs/decisions.md §12) needs the WordPress
-# import commands, which do not exist yet. It is reported, never passed.
+# docs/decisions.md §12 requires both imports to be idempotent. The content
+# import is checked by content_import_idempotency; the auth service's user
+# import does not exist yet. Reported, never passed.
 DEFERRED_CHECKS=(
-  "WordPress import idempotency (run both imports twice; second run must create/update nothing): import commands not implemented yet"
+  "Auth user import idempotency (import_wordpress_users run twice; second run must create/update nothing): user import not implemented yet"
 )
 
 report_deferred() {

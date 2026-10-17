@@ -11,6 +11,7 @@ frontend_static_checks
 frontend_tests
 django_checks
 django_tests
+content_import_idempotency
 frontend_build
 report_deferred
 
