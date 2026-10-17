@@ -1,0 +1,6 @@
+// Design tokens: every value is defined once here and emitted as a CSS custom
+// property by base/_root.scss. The full token set is added with the theme.
+$colors: (
+  "bg": #f7f7f5,
+  "text": #1a1a1a,
+);

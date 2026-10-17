@@ -1,0 +1,37 @@
+{
+  "extends": ["stylelint-config-standard-scss"],
+  "rules": {
+    "max-nesting-depth": 2,
+    "at-rule-disallowed-list": [
+      ["import", "media"],
+      {
+        "message": "Use @use/@forward instead of @import, and the breakpoint mixin instead of @media."
+      }
+    ],
+    "selector-class-pattern": [
+      "^[a-z][a-z0-9]*(-[a-z0-9]+)*(__[a-z0-9]+(-[a-z0-9]+)*)?(--[a-z0-9]+(-[a-z0-9]+)*)?$",
+      {
+        "message": "Use BEM class names: block, block__element, block--modifier (kebab-case)."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["scss/abstracts/_mixins.scss"],
+      "rules": {
+        "at-rule-disallowed-list": [["import"]]
+      }
+    },
+    {
+      "files": ["scss/components/**/*.scss"],
+      "rules": {
+        "selector-max-type": [
+          0,
+          {
+            "message": "Component styles use single-class BEM selectors, not element selectors."
+          }
+        ]
+      }
+    }
+  ]
+}

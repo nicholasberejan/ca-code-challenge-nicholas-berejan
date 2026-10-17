@@ -89,7 +89,44 @@ Before completion:
 - Run relevant tests.
 - Run lint/type checks.
 - Verify against acceptance criteria.
+- For non-trivial changes, complete the independent review below.
 - Report assumptions and unresolved risks.
+
+## Completion Workflow (non-trivial changes)
+
+Passing tests is evidence of correctness, not the definition of
+correctness. Independent review does not replace deterministic
+verification, and deterministic verification does not replace
+independent review.
+
+**Review is required** for non-trivial changes to application behavior,
+models/schema, migrations or import behavior, APIs, authentication or
+authorization, shared-library contracts, frontend behavior/state,
+security boundaries, verification infrastructure, or architecture.
+**Not required** for minor documentation edits, typo fixes,
+formatting-only changes and similarly trivial edits. When unsure, review.
+
+1. Read the relevant requirements (`CHALLENGE.md`,
+   `docs/acceptance-criteria.md`) and approved decisions
+   (`docs/decisions.md`) before implementing.
+2. Implement only the requested scope.
+3. Add or update tests that prove the required behavior.
+4. Run the applicable deterministic verification (`scripts/verify.sh`
+   for anything beyond a narrow change).
+5. Delegate an independent review to the `reviewer` subagent
+   (`.claude/agents/reviewer.md`). Tell it the task's scope and the diff
+   to review (e.g. uncommitted changes, or `main...HEAD`), not your
+   conclusions: it reads the requirements and the actual diff itself.
+6. Evaluate every finding yourself. You remain responsible for deciding
+   whether a finding is valid; do not apply findings blindly.
+7. Resolve every valid BLOCKING finding before completion.
+8. Address each IMPORTANT finding, or report it with the reason it was
+   not addressed.
+9. Do not expand scope for OPTIONAL findings.
+10. If fixes materially change the implementation, rerun deterministic
+    verification and request another review of the resulting diff.
+11. Only then report the task complete, including the reviewer's verdict
+    and how each BLOCKING/IMPORTANT finding was handled.
 
 ## Agent Corrections
 
@@ -101,14 +138,21 @@ When corrected, determine whether the correction represents:
 
 ## Verification
 
-`scripts/verify-fast.sh` and `scripts/verify.sh` are currently
-verification scaffolding.
+`scripts/verify-fast.sh` and `scripts/verify.sh` are the canonical fast
+and full verification entry points. Every check is defined once, in
+`scripts/lib/checks.sh`, and runs inside Docker containers.
 
-During initial repository investigation, identify the project's
-existing formatting, linting, type-checking, testing, build, and
-SCSS compilation tooling.
+- `verify-fast.sh`: lint, format, types and unit tests; no databases.
+  Runs on every `git commit` via `.githooks/pre-commit`
+  (enabled per clone with `make hooks`).
+- `verify.sh`: everything in fast, plus Django tests on PostgreSQL,
+  Django checks, migration checks and the production frontend build.
+  The Claude Code Stop hook (`scripts/claude-stop-verify.sh`) runs it
+  before a turn ends whenever non-Markdown files changed.
 
-Do not modify the verification scripts during the investigation.
+Checks whose feature does not exist yet are listed as deferred in
+`scripts/lib/checks.sh` and reported, never counted as passed. When a
+feature lands, replace its deferred entry with a real check.
 
-After the tooling has been reviewed and approved, these scripts
-will become the canonical fast and full verification entry points.
+Do not weaken, skip or bypass a check (including `--no-verify`) to get a
+passing result.

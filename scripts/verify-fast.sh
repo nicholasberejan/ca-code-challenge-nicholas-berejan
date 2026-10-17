@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
+# Fast verification: lint, format, types and unit tests. No databases.
+# Runs on every commit (.githooks/pre-commit).
+source "$(dirname "$0")/lib/checks.sh"
 
-set -euo pipefail
+build_images
+python_lint
+shared_auth_types
+shared_auth_tests
+frontend_static_checks
+frontend_tests
 
-echo "=== Fast Verification ==="
-echo "Verification commands have not yet been configured."
-echo "Run repository investigation before configuring this script."
+finish_step
+printf '\nFast verification passed.\n'

@@ -87,6 +87,126 @@ services:
       PMA_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wp}
       UPLOAD_LIMIT: 256M
 
+  # --- Django replacement site -------------------------------------------
+  # Each service is given only the variables it needs; in particular, only
+  # `auth` receives JWT_PRIVATE_KEY. Values come from .env (see .env.example).
+
+  web:
+    build:
+      context: .
+      dockerfile: services/web/Dockerfile
+    # Deliberately no dependency on `auth` or WordPress's `db`: public pages
+    # must work while the auth service is down.
+    depends_on:
+      main-db:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${WEB_DJANGO_SECRET_KEY:-}
+      DJANGO_DEBUG: "1"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,web
+      POSTGRES_HOST: main-db
+      POSTGRES_DB: ${MAIN_DB_NAME:-}
+      POSTGRES_USER: ${MAIN_DB_USER:-}
+      POSTGRES_PASSWORD: ${MAIN_DB_PASSWORD:-}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
+      JWT_ISSUER: ${JWT_ISSUER:-}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-}
+      WP_DB_HOST: ${WP_DB_HOST:-}
+      WP_DB_NAME: ${WP_DB_NAME:-}
+      WP_DB_USER: ${WP_DB_USER:-}
+      WP_DB_PASSWORD: ${WP_DB_PASSWORD:-}
+    volumes:
+      - ./services/web:/repo/services/web
+
+  main-db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${MAIN_DB_NAME:-}
+      POSTGRES_USER: ${MAIN_DB_USER:-}
+      POSTGRES_PASSWORD: ${MAIN_DB_PASSWORD:-}
+    volumes:
+      - main_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      DJANGO_SECRET_KEY: ${AUTH_DJANGO_SECRET_KEY:-}
+      DJANGO_DEBUG: "1"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,auth
+      POSTGRES_HOST: auth-db
+      POSTGRES_DB: ${AUTH_DB_NAME:-}
+      POSTGRES_USER: ${AUTH_DB_USER:-}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
+      JWT_ISSUER: ${JWT_ISSUER:-}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-}
+      WP_DB_HOST: ${WP_DB_HOST:-}
+      WP_DB_NAME: ${WP_DB_NAME:-}
+      WP_DB_USER: ${WP_DB_USER:-}
+      WP_DB_PASSWORD: ${WP_DB_PASSWORD:-}
+    volumes:
+      - ./services/auth:/repo/services/auth
+
+  auth-db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME:-}
+      POSTGRES_USER: ${AUTH_DB_USER:-}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-}
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # --- On-demand tooling (not started by `docker compose up`) --------------
+
+  frontend:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: services/web/Dockerfile
+      target: frontend-deps
+    working_dir: /repo/frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/repo/frontend
+      # Keep the image's node_modules instead of the host's.
+      - /repo/frontend/node_modules
+
+  shared-auth:
+    profiles: ["tools"]
+    build: ./packages/shared-auth
+    volumes:
+      - ./packages/shared-auth:/repo/packages/shared-auth
+      - ./wheels:/repo/wheels
+      - uv_cache:/root/.cache/uv
+
 volumes:
   db_data:
   wp_files:
+  main_db_data:
+  auth_db_data:
+  uv_cache:

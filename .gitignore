@@ -8,3 +8,13 @@ wp-content/uploads/wp-personal-data-exports/
 
 # Interviewer-only material — never shipped to candidates.
 interviewer/
+
+# Machine-specific Claude Code settings
+.claude/settings.local.json
+
+# Python / tooling caches
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/

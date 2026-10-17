@@ -6,19 +6,76 @@ The site is a small consumer-reviews directory: **brands** with profile pages pl
 
 ## Quick start
 
+Only Docker is required on the host.
+
 ```bash
 cp .env.example .env
-make up
+make up            # or: docker compose up -d
 ```
 
-After ~20 seconds:
+The first `up` builds the Django images (including the frontend production build), so it takes a few minutes. After that:
 
 - Public site: <http://localhost:8080>
 - WP admin:    <http://localhost:8080/wp-admin> (`admin` / `admin`)
 - phpMyAdmin:  <http://localhost:8081>
 - REST root:   <http://localhost:8080/wp-json/wp/v2/>
+- Django web service:  <http://localhost:8000/healthz>
+- Django auth service: <http://localhost:8001/healthz>
 
 The DB is auto-imported from `db/dump.sql` on first boot. No manual setup required for candidates.
+
+## Development (Django replacement site)
+
+The replacement site is being built in phases. What exists today is the foundation: both Django services, their databases, the shared library, the frontend toolchain, and verification. Brands, reviews, the API, pages, login and the WordPress import are not implemented yet.
+
+| Path | What it is |
+|---|---|
+| `services/web/` | Main Django app (port 8000), database `main-db` |
+| `services/auth/` | Auth Django service (port 8001), database `auth-db` |
+| `packages/shared-auth/` | Shared Python library, installed into both services from `wheels/` |
+| `wheels/` | Local wheelhouse of released `shared-auth` versions |
+| `frontend/` | React + TypeScript (`src/`) and SCSS (`scss/`), built with Vite |
+
+### Configuration
+
+`.env.example` holds every setting, including a development-only RS256 key pair (**DEV ONLY — production keys come from a secret store**). Compose passes the private key only to `auth`; `web` receives only the public key. If you created `.env` before these settings existed, copy `.env.example` to `.env` again.
+
+Both Django services run migrations on start and serve with Django's development server; their source directories are bind-mounted, so code changes reload automatically. Dependency changes need an image rebuild: `docker compose build`.
+
+### Verification
+
+```bash
+make hooks         # once per clone: every git commit then runs verify-fast
+make verify-fast   # lint, format, types, unit tests (no databases)
+make verify        # everything: + Django tests on PostgreSQL, Django checks, production build
+make test          # every test suite
+```
+
+The commit hook is quiet: one line per check, plus the output of any check that fails. For full output, run `VERIFY_VERBOSE=1 git commit ...`.
+
+All checks run in containers. `make verify` lists checks that are deferred until their feature exists (currently: WordPress import idempotency); deferred checks are reported, never counted as passed.
+
+### Frontend and SCSS
+
+The production build (React bundle `brand-list.js` and compiled SCSS `main.css`) happens inside the `web` image build, and Django serves it under `/static/frontend/`. To work on the frontend with the on-demand `frontend` container:
+
+```bash
+docker compose run --rm frontend npm run build      # compile SCSS + bundle into frontend/dist
+docker compose run --rm frontend npm run test       # Vitest
+docker compose run --rm --service-ports frontend npm run dev   # Vite dev server on :5173
+```
+
+Rebuild the `web` image (`docker compose build web`) to serve frontend changes from Django.
+
+### Shared library
+
+```bash
+docker compose run --rm shared-auth uv run --locked pytest   # its tests, without either Django project
+make lib-release   # build wheels/shared_auth-<version>-py3-none-any.whl
+make lock          # re-resolve the services' lockfiles after changing their shared-auth pin
+```
+
+Released versions are immutable: bump `version` in `packages/shared-auth/pyproject.toml` before `make lib-release`. Each service pins an exact version (`shared-auth==0.1.0` in its `pyproject.toml`) and upgrades on its own schedule. See `packages/shared-auth/README.md`.
 
 ## Stack
 
@@ -50,14 +107,17 @@ WP core files and the default themes (e.g. twentytwentyfour) live inside the `wp
 ## Make targets
 
 ```
-make up         # start db + wordpress + phpmyadmin
+make up         # start everything: WordPress source + Django services + databases
 make down       # stop containers (keeps volumes)
-make reset      # stop AND wipe volumes (next 'up' re-imports dump.sql)
+make reset      # stop AND wipe all volumes, including the Django databases (next 'up' re-imports dump.sql)
 make logs       # tail wordpress + db
 make wp ARGS="plugin list"   # run wp-cli inside the stack
 make bootstrap  # full re-seed: WP core install + plugin install + content seed
 make dump       # export the current DB to db/dump.sql
 make status     # show running services
+make hooks      # enable git hooks (once per clone)
+make verify-fast / make verify / make test   # see "Verification" above
+make lib-release / make lock                 # see "Shared library" above
 ```
 
 ## Rebuilding the dump from scratch

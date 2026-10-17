@@ -1,0 +1,10 @@
+#!/bin/sh
+# Blocks the commit if fast verification fails. Enabled once per clone with
+# `make hooks` (git config core.hooksPath .githooks).
+#
+# Quiet by default: one line per check, and a check's output only if it fails.
+# For full output: VERIFY_VERBOSE=1 git commit ...
+if [ "${VERIFY_VERBOSE:-0}" != 1 ]; then
+  export VERIFY_QUIET=1
+fi
+exec "$(git rev-parse --show-toplevel)/scripts/verify-fast.sh"

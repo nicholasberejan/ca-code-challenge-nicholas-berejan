@@ -1,0 +1,12 @@
+@use "sass:map";
+
+$breakpoints: (
+  "sm": 640px,
+);
+
+// The only place media queries are written; partials use this mixin.
+@mixin below($name) {
+  @media (width <= map.get($breakpoints, $name)) {
+    @content;
+  }
+}
