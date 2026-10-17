@@ -1,30 +1,125 @@
 # AI Development Log
 
-This document records meaningful observations from
-AI-assisted development and resulting improvements
-to the development system.
+This document records meaningful observations from AI-assisted development
+and resulting improvements to the development system. Routine prompting,
+implementation steps, and accepted suggestions are intentionally omitted.
 
 ## Entries
 
 ### 2026-10-16: Planning-session decisions where AI output was changed or rejected
 
-- **Top review.** The AI recommended "highest-rated review" (simple,
-  deterministic). I rejected it as systematically favorable to brands and
-  chose the review closest to the mean. My first tie rule ("closest without
-  going over") was itself replaced during reconciliation by strict nearest
-  distance, with the lower rating preferred only on exact ties.
-- **Industry filter options.** The AI raised a question I hadn't considered
-  (where the dropdown's options come from) and laid out options. I chose a
-  dedicated `GET /api/industries/` endpoint.
-- **Average-rating precision.** The AI proposed rounding the API value to
-  one decimal place. I moved that formatting to the UI and kept two decimal
-  places in the API contract.
+- **Top review.** The AI recommended "highest-rated review" because it was
+  simple and deterministic. I rejected it as systematically favorable to
+  brands and chose the review closest to the mean. My first tie rule
+  ("closest without going over") was itself challenged during reconciliation:
+  it could choose a review farther from the mean than an above-mean review.
+  The final rule uses strict nearest distance, with the lower rating preferred
+  only on exact ties.
+
+- **Industry filter options.** The AI raised a question I had not considered:
+  where the filter's available industries come from. Hard-coding them in
+  React would duplicate backend state, while deriving them from a paginated
+  brand response could produce an incomplete set. I chose a dedicated
+  `GET /api/industries/` endpoint.
+
+- **Industry filtering and aggregates.** During API design, I identified that
+  joining Brand → Industry while also aggregating Brand → Review can multiply
+  review rows when a brand matches more than one selected industry. Applying
+  `distinct()` to the outer result would not necessarily repair aggregates
+  already calculated over the multiplied rows. I chose to isolate industry
+  membership in a subquery so the outer brand query can aggregate reviews
+  independently. This became an explicit acceptance criterion: a brand
+  matching multiple selected industries must appear once without inflated
+  review count or average rating.
+
+- **Average-rating authority.** Inspection of the source data showed that the
+  stored WordPress ACF average disagrees with the average derived from Review
+  ratings for four of five brands. Rather than treating the imported aggregate
+  as authoritative, I chose Review rows as the source of truth and retained
+  the WordPress value only as `legacy_average_rating` for source/audit
+  purposes. This avoids maintaining two authoritative representations of the
+  same value.
+
+- **Average-rating precision.** The AI proposed rounding the API value to one
+  decimal place. I moved presentation rounding to the UI and kept greater
+  precision in the API contract so clients can observe a value consistent
+  with the value used for sorting.
+
+- **WordPress password migration.** The challenge permits resetting migrated
+  passwords, which would have been the simpler implementation. Investigation
+  showed that the source users use WordPress 6.8+ `$wp$` hashes. I chose to
+  support those hashes as a transitional compatibility mechanism so existing
+  credentials continue to work. On the first successful login, Django
+  upgrades the stored password to its native configured hash. Because this
+  introduces security-sensitive compatibility code, verification against
+  known source credentials and explicit incorrect-password tests are required.
+
+- **Authorization consistency.** I considered validating permissions against
+  the auth service on every protected request, which would make role changes
+  immediate but couple writes to auth-service availability. I instead chose
+  short-lived, locally verified RS256 access tokens. This deliberately accepts
+  a bounded role-staleness window of approximately five minutes in exchange
+  for keeping token verification independent of auth-service availability.
+  Refresh reloads the user's current roles from the auth database so stale
+  roles do not propagate into newly issued access tokens.
+
 - **Audit log.** The AI proposed an audit log on PATCH to mitigate the
-  ~5-minute role-staleness window. I removed it as scope with no CHALLENGE
-  requirement behind it, and accepted the bounded window explicitly instead.
+  approximately five-minute role-staleness window. I removed it as scope with
+  no `CHALLENGE.md` requirement behind it and accepted the bounded window
+  explicitly instead. This was a useful check against allowing reasonable
+  architectural ideas to become unnecessary assessment scope.
+
 - **HTML sanitization.** The plan initially adopted the AI's recommendation
   to sanitize at render and keep stored HTML identical to WordPress. I
-  reversed this: sanitize once at import, the trust boundary.
+  reversed this after reconsidering the trust boundary: externally sourced
+  WordPress HTML is sanitized once as it enters the new application. Future
+  HTML write paths would need to pass through the same sanitizer before
+  persistence.
+
 - **Process.** Decision records had started to mention who suggested what.
   I moved that history here so `decisions.md` records only what was decided
-  and why.
+  and why. `acceptance-criteria.md` records observable requirements, while
+  this log records noteworthy aspects of the human/AI process that produced
+  them.
+
+### 2026-10-17: Transition from planning to implementation
+
+- **Acceptance criteria before implementation.** Rather than allowing the
+  implementation agent to determine what constitutes success while writing
+  the application, I established and committed acceptance criteria before
+  implementation. Architecture decisions were then reconciled against those
+  criteria and `CHALLENGE.md`. This gives implementation agents an independent
+  definition of expected behavior and reduces the risk of implementation and
+  tests converging on the same incorrect assumption.
+
+- **Incremental implementation strategy.** I chose not to ask the AI to
+  implement the entire challenge from the completed architecture in one pass.
+  Implementation will proceed in bounded, independently verifiable phases:
+  project/tooling scaffolding, domain/import, API, SSR/SCSS, React, auth/shared
+  library, and final integration. Each phase is planned before implementation
+  and must satisfy its verification checkpoint before work proceeds.
+
+- **Development-system improvements should be earned.** I am starting
+  implementation without creating a large collection of speculative AI
+  skills, agents, and hooks. Repeated failure patterns will determine what is
+  promoted into persistent context, a reusable skill, a deterministic test,
+  a hook, or another verification gate. The goal is for the development
+  system to become stricter in response to observed failures rather than
+  accumulating process for its own sake.
+### 2026-10-17: Phase 1 (foundation) findings
+
+- **A clean-clone test caught a silent packaging failure.** `uv build` writes
+  a `.gitignore` containing `*` into its output directory, so the released
+  shared-auth wheel in `wheels/` was invisible to git. Everything passed in
+  the working copy; only rebuilding from a fresh copy of the tracked files
+  exposed that the images could not build. Fixed with
+  `--no-create-gitignore` in `scripts/lib-release.sh`. Lesson: verify from
+  what git would actually ship, not from the working directory.
+- **Gates were proven to fail, not just to pass.** Each new check (tsc,
+  ESLint/jsx-a11y, Stylelint rules, ruff, the commit hook, the Claude Stop
+  hook) was run against a deliberately planted violation before being
+  trusted, so a silent or misconfigured check cannot report success.
+- **Rules from `decisions.md` became lint rules.** The SCSS decisions
+  (`@use` instead of `@import`, media queries only through the breakpoint
+  mixin, nesting depth 2, BEM class names, no element selectors in
+  components) are enforced by Stylelint rather than left to review.

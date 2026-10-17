@@ -1,0 +1,14 @@
+# The Docker build context is the repository root (so services can install
+# shared-auth from wheels/). Only send what the images need.
+*
+!frontend/
+!packages/
+!services/
+!wheels/
+**/node_modules
+**/__pycache__
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+frontend/dist

@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(chmod +x /Users/sergioeduardoruiz/Downloads/wpress-convert/scripts/extract-theme-css.sh)",
-      "Bash(/Users/sergioeduardoruiz/Downloads/wpress-convert/scripts/extract-theme-css.sh)"
-    ]
-  }
-}

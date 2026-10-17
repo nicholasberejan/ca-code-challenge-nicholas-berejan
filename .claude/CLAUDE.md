@@ -101,14 +101,21 @@ When corrected, determine whether the correction represents:
 
 ## Verification
 
-`scripts/verify-fast.sh` and `scripts/verify.sh` are currently
-verification scaffolding.
+`scripts/verify-fast.sh` and `scripts/verify.sh` are the canonical fast
+and full verification entry points. Every check is defined once, in
+`scripts/lib/checks.sh`, and runs inside Docker containers.
 
-During initial repository investigation, identify the project's
-existing formatting, linting, type-checking, testing, build, and
-SCSS compilation tooling.
+- `verify-fast.sh`: lint, format, types and unit tests; no databases.
+  Runs on every `git commit` via `.githooks/pre-commit`
+  (enabled per clone with `make hooks`).
+- `verify.sh`: everything in fast, plus Django tests on PostgreSQL,
+  Django checks, migration checks and the production frontend build.
+  The Claude Code Stop hook (`scripts/claude-stop-verify.sh`) runs it
+  before a turn ends whenever non-Markdown files changed.
 
-Do not modify the verification scripts during the investigation.
+Checks whose feature does not exist yet are listed as deferred in
+`scripts/lib/checks.sh` and reported, never counted as passed. When a
+feature lands, replace its deferred entry with a real check.
 
-After the tooling has been reviewed and approved, these scripts
-will become the canonical fast and full verification entry points.
+Do not weaken, skip or bypass a check (including `--no-verify`) to get a
+passing result.
