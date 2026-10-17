@@ -123,3 +123,23 @@ implementation steps, and accepted suggestions are intentionally omitted.
   (`@use` instead of `@import`, media queries only through the breakpoint
   mixin, nesting depth 2, BEM class names, no element selectors in
   components) are enforced by Stylelint rather than left to review.
+
+### 2026-10-17: Independent reviewer subagent
+
+- **Verification and review answer different questions.** Deterministic
+  verification answers whether the known mechanical checks pass. An
+  independent review answers whether the implementation appears to be the
+  right implementation of the requirements, including whether the tests
+  actually prove them. The implementing agent should not be the only judge
+  of its own work.
+- **Introduced after the foundations, not before.** The reviewer
+  (`.claude/agents/reviewer.md`) was added only once the requirements,
+  decisions and verification gates existed, so it reviews against settled
+  sources rather than inventing its own standard.
+- **Read-only and independent by design.** It reads `CHALLENGE.md`, the
+  acceptance criteria and the decisions itself, inspects the actual diff,
+  and does not rely on the implementing agent's summary. It reports findings
+  by severity; the parent agent decides which are valid.
+- **Enforcement deliberately deferred.** Invoking the reviewer is an
+  instruction in `CLAUDE.md`, not a Stop-hook requirement. A hook will be
+  added only if agents are observed skipping the review.
