@@ -73,6 +73,9 @@ feature begins.
   records, and reports any review whose `reviewer_name` differs from its
   author's display name.
 - The import never writes to the WordPress database.
+- The import reports any brand or review postmeta key that is neither
+  mapped to a field nor explicitly dropped, with the number of posts
+  carrying it. Unrecognised keys never cause the import to fail.
 
 ### Missing Source Entities and Pruning
 
@@ -98,6 +101,16 @@ feature begins.
 - Requests for nonexistent brand or review slugs return an appropriate
   404 response.
 - Recent-review ordering is deterministic.
+- The homepage shows a hero and the 6 most recent reviews, newest first
+  (ties broken by WordPress ID).
+- A brand page shows the brand's name, industry badges, derived average
+  rating (one decimal place) and review count, website, founded year,
+  headquarters, body, and all of its reviews, newest first.
+- A review page shows a link back to its brand, its title, rating, reviewer
+  display name and location, publish date, and body.
+- `/brand/` hosts the `<BrandList />` component.
+- WordPress static pages (Home, About, Contact) are not migrated, and the
+  site navigation does not link to them.
 
 ### HTML Sanitization
 
@@ -152,6 +165,8 @@ feature begins.
 - `short_description` is seeded from `post_excerpt` in the WordPress data
   when present; otherwise from ~22 words of `post_content` with tags
   stripped and entities decoded.
+- A seeded value is stored as-is even if it exceeds the 300-character limit
+  that applies to PATCH edits.
 
 ### Top Review
 
@@ -197,7 +212,8 @@ feature begins.
 
 ### Protected Brand Update
 
-A write endpoint for editing a brand's short description:
+`PATCH /api/brands/<slug>/`, a write endpoint for editing a brand's short
+description:
 
 - requires authentication.
 - rejects invalid or missing authentication with 401.
@@ -205,6 +221,8 @@ A write endpoint for editing a brand's short description:
 - allows a user with editor permission to update the short description.
 - does not permit modification of fields outside the endpoint's intended
   scope.
+- on success, returns 200 with the updated brand in the same shape as a
+  listing row.
 - validates `short_description`:
   - must be a non-empty string;
   - maximum length 300 characters (after trimming);
@@ -239,6 +257,16 @@ A write endpoint for editing a brand's short description:
 - includes a single-select `<select>` element with an "All industries"
   option. The API still accepts repeated values for future expansion to
   multi-select.
+- Loading, empty and error UX:
+  - On first load, a loading message is shown. On later changes, the
+    previous results stay visible but dimmed, and the results region is
+    marked `aria-busy="true"` until the new results arrive.
+  - After each load, the number of brands is announced through a polite
+    live region.
+  - An empty result shows a "No brands match" message with a control that
+    clears the filter.
+  - A failed request shows an error message with a Retry control that
+    repeats the last request; the filter and sort controls remain usable.
 - Pagination interaction:
   - Previous and Next buttons with a "Page X of Y" label; a button is disabled
     (not hidden) when there is no page in that direction.
@@ -291,6 +319,11 @@ A write endpoint for editing a brand's short description:
 
 - WordPress users exist in the auth service after migration.
 - Re-running user migration does not create duplicate users.
+- Re-running user migration never modifies an existing user: a role
+  changed in the auth service, a deactivation, and an upgraded password
+  hash all survive re-import.
+- Migrated users log in with their WordPress login name as `username`.
+- WordPress administrators can sign in to the auth service's Django admin.
 - The chosen password migration/reset behavior is documented.
 - Migrated users can log in with their existing WordPress passwords (the
   `$wp$` format present in the source data); an incorrect password is
@@ -312,11 +345,20 @@ A write endpoint for editing a brand's short description:
   key, without calling the auth service.
 - Refresh tokens last about one day and are rotated on every use; a used or
   revoked refresh token is rejected.
+- `POST /api/token/` exchanges `username` and `password` for an access token
+  and a refresh token.
+- `POST /api/token/refresh/` exchanges a refresh token for a new access token
+  and a new refresh token.
+- `POST /api/token/logout/` revokes the given refresh token; it can no longer
+  be used.
 
 ### Authorization
 
 - At least `reader` and `editor` roles exist.
 - The auth service is authoritative for role/permission assignments.
+- Roles are changed, users deactivated, and a user's sessions revoked
+  through the auth service's Django admin. Revoking a user's sessions
+  rejects all of their existing refresh tokens.
 - An editor can call the protected brand-update endpoint.
 - A reader cannot call the protected brand-update endpoint.
 - WordPress-role-to-application-role mapping: "administrator" becomes "editor", "subscriber" becomes "reader".
@@ -334,8 +376,8 @@ A write endpoint for editing a brand's short description:
   server-rendered pages are unaffected. PATCH with a valid, unexpired token
   still succeeds. Login and refresh fail.
 - The main app receives the auth service's public key through
-  configuration at deploy time and never fetches it from the auth service
-  at runtime. If the key is missing, the main app fails at startup with a
+  configuration (an environment variable) and never fetches it from the
+  auth service at runtime. If the key is missing, the main app fails at startup with a
   clear configuration error.
 
 ## 6. Shared Python Library
@@ -413,8 +455,13 @@ Before the assessment is considered complete:
   both imports creates and updates nothing.
 - All verification runs inside containers; only Docker is required on the
   host.
-- `make up` starts the WordPress source, both Django services, both
-  PostgreSQL databases, and generates development keys if missing. The main
-  app starts and serves public pages when the auth service is not running.
+- After `cp .env.example .env`, `docker compose up -d` (or `make up`) starts
+  the WordPress source, both Django services and both PostgreSQL databases
+  with no other setup step: development keys come from `.env.example`, and
+  the React and CSS assets are built into the `web` image.
+- The main app starts and serves public pages when the auth service is not
+  running.
 - Only the auth service has access to the private signing key; the main app
   container has only the public key.
+- The development key pair in `.env.example` is clearly labelled as
+  development-only.

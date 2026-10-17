@@ -52,6 +52,8 @@ WordPress allows a brand to have more than one industry, although every seeded b
 
 `Brand.short_description` is stored, editable plain text, seeded on import from `post_excerpt` when present, otherwise from ~22 words of `post_content` with tags stripped and entities decoded. The PATCH endpoint must edit this field, so it cannot be derived. The trim matches what the WordPress theme displays on cards.
 
+A seeded value is stored as-is even if it exceeds the 300-character PATCH limit (§4); the limit applies only to edits. No current data is affected, since every seeded brand has an empty excerpt.
+
 ### No user accounts or Django admin in the main app
 
 The main app stores no users, passwords, roles or permissions; the auth service owns all of them. API requests are identified by a lightweight, non-persisted principal built from the verified token by the shared library's DRF authentication class. The main app has no Django admin, because the admin requires local accounts with passwords, and migrating the WordPress admin is out of scope. Consequence: brand edits happen only through the protected PATCH endpoint; all other content comes from the WordPress import.
@@ -61,6 +63,7 @@ The main app stores no users, passwords, roles or permissions; the auth service 
 - The source has 10 postmeta rows per brand: 4 ACF values, 4 ACF field-key references, 2 Yoast fields.
 - First-class fields (WordPress postmeta to Django model fields): brand `website_url`, `founded_year`, `headquarters`, `average_rating` (as `legacy_average_rating`); review `rating`, `reviewer_location`; review `brand` becomes an FK.
 - Nothing is stored as JSON: every retained value has a known type and its own column.
+- Every postmeta key is either mapped to a field or explicitly listed as dropped. The importer reports any key that is in neither list, with how many posts carry it, instead of silently ignoring it or storing it as JSON. A real site carries many more keys than this seed (editor bookkeeping such as `_edit_lock`, Yoast scores); new ones are surfaced for a deliberate decision.
 - Dropped fields: the `_<field>` → `field_…` ACF key references (ACF plumbing); review `reviewer_name` (redundant with `Reviewer.display_name`; mismatches are reported by the importer).
 - Yoast `_yoast_wpseo_title` / `_yoast_wpseo_metadesc` are dropped. They contain hand-written copy that goes stale (e.g. review counts). Brand pages generate `<title>` from the brand name and `<meta name="description">` from the `short_description`, which editors keep current. Accepted loss: editor-tuned SEO copy (retained in the WordPress dump); search snippets will change after cutover.
 
@@ -80,7 +83,7 @@ The main app stores no users, passwords, roles or permissions; the auth service 
 ### Two independent commands
 
 - Main app `import_wordpress`: industries, brands, reviewers, reviews.
-- Auth service `import_wordpress_users`: users, password hashes, roles. WordPress roles are stored PHP-serialized and parsed with `phpserialize`.
+- Auth service `import_wordpress_users`: users, password hashes, roles. WordPress roles are stored PHP-serialized and parsed with `phpserialize`. This import only creates users: an account that already exists (matched by `wp_user_id`) is never modified. After cutover the auth service owns the whole account, so re-running the import must not overwrite a changed role, a deactivation, or a password already upgraded to Django's hasher.
 - Each service imports only what it owns. The main app never references auth accounts, so load order doesn't matter.
 
 ### Re-runnability and field ownership
@@ -90,7 +93,7 @@ The main app stores no users, passwords, roles or permissions; the auth service 
 - `short_description` is set only when a brand is first created, so editor changes survive re-imports. Later WordPress excerpt changes do not flow through; this is a one-way cutover.
 - Slug changes: our slug follows WordPress's on every run. If a slug changes in WordPress, the old URL stops working; no redirects are kept.
 - HTML content is sanitized during import before it is stored (see §9).
-- The command prints a summary of created, updated, unchanged and missing records.
+- The command prints a summary of created, updated, unchanged and missing records, and lists any unrecognised postmeta keys (§2).
 
 ### Entities missing from the source, and `--prune`
 
@@ -184,6 +187,25 @@ Each brand row returns `industries: [{slug, name}]`. Filtering by industry match
 - Pagination: `page` and `page_size` (default 12, maximum 50). The response envelope is `{count, next, previous, results}`.
 - Errors: an invalid parameter returns 400 with `{"errors": {"<param>": ["..."]}}`. An out-of-range page returns 404.
 
+### Why this contract shape
+
+- **Page-number pagination** supports the "Page X of Y" control, deep links to a specific page, and a total count, and costs nothing at this data size. Cursor pagination was not needed for a small, rarely changing list.
+- **`ordering`** is DRF's convention for sort parameters, with `-` for descending.
+- **`industry` is repeatable**, so moving the UI to multi-select needs no API change.
+- **400 for unknown values** instead of silently ignoring them, so client bugs surface immediately.
+
+### If a mobile client also consumed the API
+
+- Version the path (`/api/v1/`), because installed app versions can't be force-upgraded and the contract must stay stable for older clients.
+- Offer cursor pagination for infinite scroll; it stays stable when data changes between page requests.
+- Keep `next`/`previous` as absolute URLs (DRF's default) so clients never construct them.
+- Add caching headers (ETag / `Last-Modified`) to save bandwidth on mobile networks.
+- No auth change: JWT access tokens plus refresh tokens already suit a native client.
+
+### PATCH endpoint
+
+`PATCH /api/brands/<slug>/` with a JSON body containing only `short_description`. A successful update returns 200 with the updated brand in the same shape as a listing row.
+
 ### PATCH validation
 
 `short_description` must be a non-empty string; maximum length 300 characters (after trimming); surrounding whitespace trimmed; HTML treated as plain text.
@@ -199,6 +221,13 @@ Each brand row returns `industries: [{slug, name}]`. Filtering by industry match
     - Invalid URL values fall back to defaults instead of erroring.
     - Observable: a deep link reproduces the view, and Back restores the previous filter.
 - Pagination: Previous and Next buttons driven by the API's `previous`/`next` links, with a "Page X of Y" label. A button is disabled (not hidden) when there is no page in that direction. After a page change, keyboard focus moves to the results heading so keyboard and screen-reader users land on the new results. Changing the filter or sort resets to page 1. Chosen over numbered page links because there are currently 5 brands (a single page at 12 per page).
+
+### Loading, empty and error UX
+
+- **Loading:** on first load, a loading message; on later changes, the previous results stay visible but dimmed, with `aria-busy="true"` on the results region, so the page doesn't jump.
+- **Result count:** "N brands" is announced through a polite live region (`aria-live="polite"`) after each load.
+- **Empty:** a "No brands match" message with a button that clears the filter.
+- **Error:** an error message with a Retry button that repeats the last request; the filter and sort controls stay usable.
 
 ### State ownership
 
@@ -230,6 +259,24 @@ Each brand row returns `industries: [{slug, name}]`. Filtering by industry match
 ### Ownership
 
 The auth service is responsible for user accounts (login names, active status), credentials, roles/permissions, processing login (checking credentials and active status), token refresh/revocation, and user import. It holds the private key that signs tokens; the matching public key is given to the main app. The main app verifies tokens through the shared library, never seeing passwords or refresh tokens, and enforces the permission: 401 for an invalid or missing token, 403 for a valid token without permission.
+
+### User model, roles and administration
+
+- The auth service uses a custom Django user model (`AbstractUser` plus a unique `wp_user_id`), created before the first migration as Django recommends. WordPress `user_login` becomes `username`; `user_email` becomes `email`; the WordPress hash goes into the standard `password` field.
+- Roles are Django groups named `reader` and `editor`. A token's `roles` claim lists the user's groups that are known roles.
+- The auth service enables the Django admin. Unlike the main app, it owns real user accounts with passwords, so the admin works as designed. Operators use it to change a user's roles, deactivate a user, and revoke sessions.
+- WordPress administrators are imported with admin access (`is_staff`, `is_superuser`) in addition to the `editor` role, so the existing WordPress admin can operate the auth admin after cutover.
+
+### Endpoints
+
+- `POST /api/token/` with `username` (the WordPress login name) and `password`: returns an access token and a refresh token.
+- `POST /api/token/refresh/` with a refresh token: returns a new access token and a new (rotated) refresh token.
+- `POST /api/token/logout/` with a refresh token: blocks it, ending that session.
+
+### Revocation
+
+- A role change or deactivation in the admin takes effect at the user's next refresh (see Refresh tokens), within one access-token lifetime.
+- To end a user's sessions without changing their roles, an admin action blocks all of that user's outstanding refresh tokens (simplejwt's token blacklist). Their current access token still works until it expires.
 
 ### Local token verification
 
@@ -263,7 +310,7 @@ If the auth service is down, public pages and GET endpoints are unaffected, beca
 
 ### Public key distribution
 
-The auth service's public key is supplied to the main app at deploy time (a mounted file via Compose); the main app never fetches it from the auth service at runtime. The key is therefore always available, and a missing key is a startup configuration error rather than a request-time failure. Tradeoff: rotating the key means redeploying the main app. With more time: publish keys at a JWKS endpoint for easier rotation, which would then require deciding what PATCH returns when keys can't be fetched (503 rather than 401).
+The auth service's public key is supplied to the main app at deploy time as configuration (an environment variable; see §13); the main app never fetches it from the auth service at runtime. The key is therefore always available, and a missing key is a startup configuration error rather than a request-time failure. Tradeoff: rotating the key means redeploying the main app. With more time: publish keys at a JWKS endpoint for easier rotation, which would then require deciding what PATCH returns when keys can't be fetched (503 rather than 401).
 
 ### Password migration: transitional compatibility
 
@@ -345,6 +392,14 @@ Main app: filtering, ordering, pagination, serializers, PATCH validation. Auth s
 - MariaDB: rejected because it ties us to the system being retired and lacks transactional schema changes.
 - SQLite: rejected because tests would run on a different database than production, and it is weak with concurrent writes.
 
+### Server-rendered page content
+
+- **Homepage (`/`):** a hero with text written in the template, followed by the 6 most recent reviews (newest first by publish date, then WordPress ID).
+- **Brand page (`/brand/<slug>/`):** brand name, one badge per industry, derived average rating to one decimal place with review count, website, founded year, headquarters, body, and all of the brand's reviews, newest first.
+- **Review page (`/review/<slug>/`):** link back to its brand, title, rating, reviewer display name and location, publish date, and body.
+- **Brand listing (`/brand/`):** the page where `<BrandList />` mounts.
+- The WordPress Home, About and Contact pages are not migrated, and the header has no links to them; the header links to the homepage and the brand listing. CHALLENGE.md requires only the three pages above, and the static pages' content is placeholder text.
+
 ### HTML sanitization at import
 
 **Decision:** imported WordPress HTML is sanitized at the trust boundary, during import, and stored sanitized:
@@ -379,7 +434,6 @@ The Django database is not intended to be an exact WordPress mirror; the migrati
     - `packages/shared-auth/`: the shared library (`pyproject.toml`, `src/shared_auth/`, `tests/`).
     - `wheels/`: the wheelhouse of built library versions.
     - `frontend/`: React + TypeScript under `src/`, SCSS under `scss/`.
-    - `keys/`: development RS256 key pair (gitignored, generated by `make keys`).
     - Separate repositories were rejected: more realistic, but graders need one checkout.
 - Versions: Python 3.12, Django 5.2 LTS (supported to April 2028; Django 6.0 rejected for its shorter support window), PostgreSQL 17, Node 24 LTS (the host's Node 20 is end-of-life). The host's Python 3.9.6 and Node 20 are irrelevant because everything runs in containers.
 - Python dependencies are managed with `uv`, with a lockfile per service for reproducible builds; it supports `find-links` for the wheelhouse. Plain `pip` with pinned requirements was rejected because it has no real lockfile.
@@ -387,15 +441,16 @@ The Django database is not intended to be an exact WordPress mirror; the migrati
 ## 11. Frontend Build
 
 - Vite + React + TypeScript. One tool builds both the React bundle and the SCSS (Vite compiles SCSS natively with Dart Sass).
-- Vite writes fixed file names (`brand-list.js`, `main.css`) into a directory Django serves as static files; Django's `ManifestStaticFilesStorage` adds content hashes for cache-busting. No `django-vite` package and no reading Vite's manifest.
+- Assets are built when the `web` Docker image is built: a first Node stage in `web`'s Dockerfile runs `npm ci && vite build`, and the Python stage copies the output into a directory Django serves as static files. `docker compose up` therefore always has built assets, with no always-on frontend service. The output lives outside the bind-mounted code directory so the dev bind mount doesn't hide it.
+- Vite writes fixed file names (`brand-list.js`, `main.css`); Django's `ManifestStaticFilesStorage` adds content hashes for cache-busting. No `django-vite` package and no reading Vite's manifest.
 - The server-rendered `/brand/` page outputs `<div id="brand-list">` and React mounts into it; every other page is plain Django templates.
-- Local development: `vite build --watch` while using the Django site, or `npm run dev` (Vite's dev server, forwarding `/api` to Django) to work on the component alone.
+- Local development: a React or SCSS change appears in the Django site after rebuilding the `web` image. For faster iteration, optional tools behind a Compose `tools` profile (like the existing `wpcli`): `vite build --watch` writing into the directory `web` serves, or `npm run dev` (Vite's dev server, forwarding `/api` to Django) to work on the component alone.
 - Frontend tests: Vitest + React Testing Library + `user-event`.
-- Rejected: Vite dev server with hot reload inside Django pages (needs `django-vite`, more moving parts); webpack (slower, more config); a separate `sass` CLI (a second build step).
+- Rejected: Vite dev server with hot reload inside Django pages (needs `django-vite`, more moving parts); committing built assets to git (they go stale); serving the frontend from a separate server on another origin (needs CORS and a second server); an always-on `frontend` build service (a fresh start could serve pages before the first build finishes); webpack (slower, more config); a separate `sass` CLI (a second build step).
 
 ## 12. Verification Tooling
 
-- All checks run inside containers, so only Docker is required.
+- All checks run inside containers, so only Docker is required. Frontend checks run in the `tools`-profile `frontend` container.
 - Tools:
     - Python: ruff (lint + format); pytest + pytest-django against PostgreSQL; `manage.py check` and `makemigrations --check`.
     - mypy (strict) on the shared library only: it is small, plain Python and security-relevant. Typing both Django projects would need `django-stubs` plumbing that isn't worth it here.
@@ -412,10 +467,12 @@ The Django database is not intended to be an exact WordPress mirror; the migrati
     - `main-db` (`postgres:17`).
     - `auth` (auth service, port 8001), depends on `auth-db` being healthy.
     - `auth-db` (`postgres:17`).
-    - `frontend` (`node:24`, port 5173 for the Vite dev server).
+    - `frontend` (`node:24`), under the `tools` profile only: runs frontend checks, `vite build --watch`, or the Vite dev server (port 5173) on demand. It is not started by `docker compose up`.
 - `web` does not depend on `auth`, so the main app starts and serves public pages while auth is down. Neither service depends on WordPress's `db`; the import commands report a clear error if MariaDB isn't running.
-- Keys: `make keys` generates a development RS256 key pair into the gitignored `keys/` directory. `auth` mounts the private key read-only; `web` mounts only the public key. `make up` generates the keys first if they're missing. Committing dev keys was rejected: private keys don't belong in git, even for development.
+- Keys: one development-only RS256 key pair is committed in `.env.example` as two single-line (base64-encoded) variables, clearly labelled "DEV ONLY — production keys come from a secret store". CHALLENGE.md's setup (`cp .env.example .env && docker compose up -d`) therefore produces working keys with no extra step. Compose passes `JWT_PRIVATE_KEY` only to `auth` and `JWT_PUBLIC_KEY` only to `web`, so the main app never has the private key.
+    - Tradeoff: anyone with the repository can mint tokens for their own local stack. This is harmless with seed data, and the keys must never be used outside local development.
+    - Rejected: generating keys with a `make keys` step or a one-shot Compose service (an extra step or moving part that plain `docker compose up -d` would miss, leaving both services unable to start); hard-coding keys in application code (puts key material in source and mixes configuration with code).
 - Dev servers: each service's entrypoint runs `migrate`, then `runserver`, with code bind-mounted so it reloads on save. With more time: production-style gunicorn.
-- `.env.example` gains PostgreSQL credentials per service, a separate `DJANGO_SECRET_KEY` per service, `JWT_ISSUER`, `JWT_AUDIENCE`, key file paths, and `WP_DB_*` for the importer.
-- Makefile: `make up` starts everything. New targets: `keys`, `import` (both import commands), `test`, `verify-fast`, `verify`, and `lib-release` (bump the library version and build a wheel into `wheels/`). Existing WordPress targets are unchanged.
+- `.env.example` gains PostgreSQL credentials per service, a separate `DJANGO_SECRET_KEY` per service, `JWT_ISSUER`, `JWT_AUDIENCE`, the development `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY`, and `WP_DB_*` for the importer.
+- Makefile: `make up` starts everything. New targets: `import` (both import commands), `test`, `verify-fast`, `verify`, and `lib-release` (bump the library version and build a wheel into `wheels/`). Existing WordPress targets are unchanged.
 - The Docker build context is the repo root, so each service installs its pinned `shared-auth` version from `wheels/`. Changing the library means release, bump the service's pin, rebuild, so each service upgrades on its own schedule.
