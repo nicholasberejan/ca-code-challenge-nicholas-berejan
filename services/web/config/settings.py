@@ -26,7 +26,7 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "") == "1"
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 
-# Token verification (implemented in a later phase). The main app receives only
+# Token verification. The main app receives only
 # the public key; the private signing key belongs to the auth service.
 def rsa_public_key_from_env(name: str) -> str:
     """The base64-encoded PEM public key from the environment, checked at

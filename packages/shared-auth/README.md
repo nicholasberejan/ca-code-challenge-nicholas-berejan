@@ -4,8 +4,20 @@ Code shared by the `web` and `auth` Django services: the token contract and
 the token-verification / permission-check code the main app uses to protect
 its write endpoint. See `docs/decisions.md` §8 for what belongs here.
 
-The core is plain Python with no Django dependency. DRF integration will be
-an optional part of the package.
+## Modules, and why each is shared
+
+| Module | Used by | Why it is here |
+|---|---|---|
+| `contract.py` | auth (issues) and web (verifies) | The algorithm, claim names, roles and permissions both sides must agree on, defined once so issuer and verifier cannot drift apart. |
+| `tokens.py` (`verify_token`) | web | CHALLENGE.md requires the token-verification code in the shared library. Verification is pinned to RS256, issuer, audience and expiry. |
+| `principal.py` (`Principal`) | web | The authenticated caller built from a verified token; the main app stores no users. |
+| `drf.py` (optional, `shared-auth[drf]`) | web | The DRF authentication class and editor permission CHALLENGE.md asks for. It ships in every wheel but is only importable with Django and DRF installed; the core never imports it, and the `[drf]` extra declares those dependencies for consumers that use it (web). |
+
+Not here: token signing and the private key (auth service only), and
+anything about users, passwords or the database.
+
+The core (`contract`, `tokens`, `principal`) is plain Python plus PyJWT, with
+no Django dependency; install `shared-auth[drf]` for `drf.py`.
 
 ## Development
 

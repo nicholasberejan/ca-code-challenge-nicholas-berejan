@@ -2,7 +2,8 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 // Production assets use fixed file names so Django can reference them
-// directly; Django's static storage adds content hashes (docs/decisions.md §11).
+// directly (docs/decisions.md §11). Content hashing (collectstatic with
+// ManifestStaticFilesStorage) is not set up yet; see README.
 export default defineConfig({
   plugins: [react()],
   build: {

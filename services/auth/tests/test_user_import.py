@@ -185,3 +185,66 @@ def test_imported_administrator_can_use_the_admin_and_readers_cannot(
 
     client.force_login(User.objects.get(username="sarah_k"))
     assert client.get("/admin/accounts/user/").status_code == 302  # to login
+
+
+def test_imported_administrator_signs_in_to_the_admin_with_the_wordpress_password(
+    client, wordpress_users
+):
+    import_users(wordpress_users.values())
+
+    response = client.post(
+        "/admin/login/?next=/admin/",
+        {"username": "admin", "password": "admin", "next": "/admin/"},
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == "/admin/"
+    assert client.get("/admin/accounts/user/").status_code == 200
+    # Signing in upgraded the migrated WordPress hash.
+    assert User.objects.get(username="admin").password.startswith("pbkdf2_sha256$")
+
+
+def test_reader_cannot_sign_in_to_the_admin(client, wordpress_users):
+    import_users(wordpress_users.values())
+
+    response = client.post(
+        "/admin/login/", {"username": "sarah_k", "password": "changeme"}
+    )
+
+    # The password is right (the hash was upgraded); the account is not staff.
+    assert response.status_code == 200
+    assert "staff account" in response.content.decode()
+    assert User.objects.get(username="sarah_k").password.startswith("pbkdf2_sha256$")
+    assert client.get("/admin/accounts/user/").status_code == 302
+
+
+def test_operator_changes_a_role_and_deactivates_through_the_admin(client):
+    operator = User.objects.create_superuser("op", "op@example.com", "pw")
+    import_users([source(1, "admin", ("administrator",))])
+    target = User.objects.get(username="admin")
+    client.force_login(operator)
+    reader = Group.objects.get(name="reader")
+
+    response = client.post(
+        f"/admin/accounts/user/{target.pk}/change/",
+        {
+            "username": target.username,
+            "email": target.email,
+            "first_name": "",
+            "last_name": "",
+            "is_active": "",  # unchecked: deactivate
+            "is_staff": "",
+            "is_superuser": "",
+            "groups": [reader.pk],
+            "user_permissions": [],
+            "last_login_0": "",
+            "last_login_1": "",
+            "date_joined_0": target.date_joined.strftime("%Y-%m-%d"),
+            "date_joined_1": target.date_joined.strftime("%H:%M:%S"),
+        },
+    )
+
+    assert response.status_code == 302, response.content.decode()[:2000]
+    target.refresh_from_db()
+    assert roles_of(target) == ["reader"]
+    assert not target.is_active

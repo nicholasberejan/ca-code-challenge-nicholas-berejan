@@ -8,6 +8,8 @@ demote/deactivate them as an operator would. Phases, run in order:
           leaves an editor access token in the state file
   outage  (auth service stopped) public reads and PATCH with that token work,
           login fails
+  wordpress-outage  (WordPress database stopped) public reads, login and
+          PATCH all work: only the import commands need WordPress
   verify  (after import_wordpress) the edited description survived;
           restores it and removes the test users
   cleanup restore and remove test users (also run after a failure)
@@ -157,8 +159,18 @@ def _page(path: str) -> int:
         return error.code
 
 
+def wordpress_outage() -> None:
+    for path in ["/", "/brand/", f"/brand/{BRAND}/", "/api/brands/", "/api/industries/"]:
+        check(_page(path) == 200, f"GET {path} works while WordPress is down")
+    review = request("GET", f"{WEB}/api/brands/?page_size=1")[1]["results"][0]["top_review"]["slug"]
+    check(_page(f"/review/{review}/") == 200, "GET /review/<slug>/ works while WordPress is down")
+    token = login("e2e-editor-2")["access"]
+    status, _ = patch(token, "Edited while WordPress is down.")
+    check(status == 200, "login and PATCH work while WordPress is down")
+
+
 def verify() -> None:
-    check(current_description() == "Edited while auth is down.", "the edited description survived import_wordpress")
+    check(current_description() == "Edited while WordPress is down.", "the edited description survived import_wordpress")
 
 
 def cleanup() -> None:
@@ -174,4 +186,10 @@ def cleanup() -> None:
 
 
 if __name__ == "__main__":
-    {"main": main, "outage": outage, "verify": verify, "cleanup": cleanup}[sys.argv[1]]()
+    {
+        "main": main,
+        "outage": outage,
+        "wordpress-outage": wordpress_outage,
+        "verify": verify,
+        "cleanup": cleanup,
+    }[sys.argv[1]]()
