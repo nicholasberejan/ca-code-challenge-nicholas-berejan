@@ -13,6 +13,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from urllib.parse import urlsplit
 
 from django.db import models, transaction
 
@@ -87,6 +88,9 @@ class ImportReport:
     reviews: EntityResult = field(default_factory=EntityResult)
     skipped_reviews: list[SkippedReview] = field(default_factory=list)
     reviewer_name_mismatches: list[NameMismatch] = field(default_factory=list)
+    # (brand post ID, value) of website URLs not stored because they are not
+    # http(s) URLs with a host.
+    rejected_urls: list[tuple[int, str]] = field(default_factory=list)
     # (post type, meta key) -> number of posts carrying it.
     unknown_meta: dict[tuple[str, str], int] = field(default_factory=dict)
     pruned: bool = False
@@ -111,7 +115,7 @@ def import_snapshot(snapshot: Snapshot, *, prune: bool = False) -> ImportReport:
     report = ImportReport(pruned=prune)
     with transaction.atomic():
         industries = _import_industries(snapshot, report.industries)
-        brands = _import_brands(snapshot, industries, report.brands)
+        brands = _import_brands(snapshot, industries, report)
         _import_reviews(snapshot, brands, report)
         report.unknown_meta = _unknown_meta(snapshot)
         if prune:
@@ -173,7 +177,7 @@ def _brand_values(src: SourceBrand) -> dict[str, Any]:
         "slug": src.slug,
         "name": src.title,
         "content": sanitize_html(src.content),
-        "website_url": meta.get("website_url", "").strip(),
+        "website_url": _web_url(meta.get("website_url", "")),
         "founded_year": _optional_int(meta.get("founded_year"), src.post_id),
         "headquarters": meta.get("headquarters", "").strip(),
         "legacy_average_rating": _optional_decimal(
@@ -189,13 +193,17 @@ def _seed_short_description(src: SourceBrand) -> str:
 
 
 def _import_brands(
-    snapshot: Snapshot, industries: dict[int, Industry], result: EntityResult
+    snapshot: Snapshot, industries: dict[int, Industry], report: ImportReport
 ) -> dict[int, Brand]:
+    result = report.brands
     existing = {b.wp_post_id: b for b in Brand.objects.prefetch_related("industries")}
     imported: dict[int, Brand] = {}
     for src in sorted(snapshot.brands, key=lambda s: s.post_id):
         wanted_industries = {industries[t].pk for t in src.industry_term_ids}
         values = _brand_values(src)
+        source_url = src.meta.get("website_url", "").strip()
+        if source_url and not values["website_url"]:
+            report.rejected_urls.append((src.post_id, source_url))
         brand = existing.get(src.post_id)
         if brand is None:
             brand = Brand.objects.create(
@@ -395,6 +403,15 @@ def _prune(report: ImportReport) -> None:
 # --- Value parsing -----------------------------------------------------------
 
 
+def _web_url(value: str) -> str:
+    """The brand website is rendered as a link, so only http(s) URLs with a host
+    are kept; anything else (e.g. `javascript:`) is stored as empty and
+    reported."""
+    url = value.strip()
+    parts = urlsplit(url)
+    return url if parts.scheme.lower() in ("http", "https") and parts.netloc else ""
+
+
 def _brand_post_id(reference: str) -> int | None:
     return int(reference) if reference.isdigit() else None
 
@@ -466,6 +483,11 @@ def format_report(report: ImportReport) -> str:
                 f"  review {m.post_id}: reviewer_name {m.reviewer_name!r}, "
                 f"author {m.display_name!r}"
             )
+
+    if report.rejected_urls:
+        lines.append("Website URLs not stored (not an http(s) URL with a host):")
+        for post_id, url in report.rejected_urls:
+            lines.append(f"  brand {post_id}: {url!r}")
 
     if report.unknown_meta:
         lines.append(

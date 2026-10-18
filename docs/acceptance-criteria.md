@@ -196,6 +196,10 @@ feature begins.
   is `{count, next, previous, results}`.
 - Errors: an invalid parameter returns 400 with
   `{"errors": {"<param>": ["..."]}}`. An out-of-range page returns 404.
+- Every error returned by an API endpoint uses the same `{"errors": {...}}`
+  shape, including an unsupported method (405) and an unacceptable `Accept`
+  header (406). Errors not tied to a parameter or field use the key `detail`,
+  e.g. `{"errors": {"detail": ["Method \"POST\" not allowed."]}}`.
 - Filtering by several industries never duplicates a brand or inflates its
   aggregates. Example: a brand belonging to both Industry A and Industry B,
   with 12 reviews, requested with `industry=a&industry=b`, appears exactly

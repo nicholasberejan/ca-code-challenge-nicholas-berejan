@@ -181,6 +181,35 @@ ACF fields are exposed natively via `show_in_rest: true` set in `wp-content/mu-p
 - The site URL is hardcoded as `http://localhost:8080` in the dump (in `wp_options.siteurl` and `home`). Changing the port requires a search/replace in `db/dump.sql` before commit, or just override via `WP_HOME` / `WP_SITEURL` constants.
 - `_yoast_wpseo_*` postmeta is seeded for brand posts only.
 
+## Public pages and API (main app, port 8000)
+
+All of these are public and work without the auth service.
+
+| Route | Content |
+|---|---|
+| `/` | Hero and the 6 most recent reviews |
+| `/brand/` | Brand listing page (host for the React `<BrandList />`, not built yet) |
+| `/brand/<slug>/` | Brand: industries, rating from its reviews, website, founded, headquarters, description, all reviews |
+| `/review/<slug>/` | Review: brand link, rating, reviewer, location, date, body |
+| `GET /api/brands/` | Paginated brand cards (below) |
+| `GET /api/industries/` | Every industry as `[{"slug", "name"}]`, for filter options |
+
+`GET /api/brands/` parameters:
+
+- `industry=<slug>`: repeatable; returns brands in **any** of the given industries.
+- `ordering`: `-average_rating` (default), `average_rating`, `-review_count`, `review_count`. Ties are broken by slug. With either `average_rating` ordering, brands with no reviews (average `null`) sort last.
+- `page` (default 1) and `page_size` (default 12, maximum 50).
+
+```bash
+curl 'http://localhost:8000/api/brands/?industry=insurance&industry=telecom&ordering=-review_count&page_size=5'
+```
+
+Each result has `name`, `slug`, `industries` (`[{slug, name}]`), `average_rating` (derived from the reviews, a number rounded to 2 decimals, `null` without reviews), `review_count`, `short_description` and `top_review` (`{slug, title, rating, reviewer_name, snippet}` or `null`). The envelope is `{count, next, previous, results}`.
+
+The top review is the one whose rating is closest to the brand's average; on an exact tie the lower rating wins, then the newest, then the lowest WordPress ID.
+
+Errors: an invalid parameter returns `400` with `{"errors": {"<param>": ["..."]}}` (all invalid parameters at once); a page past the end returns `404` with the same shape.
+
 ## Migrating WordPress data into Django
 
 The main app's `import_wordpress` command copies published WordPress content (industries, brands, reviewers, reviews) into the `web` service's PostgreSQL database. It reads the WordPress MariaDB (`db` service) directly over the Compose network, using `WP_DB_HOST`, `WP_DB_NAME`, `WP_DB_USER` and `WP_DB_PASSWORD` from `.env`. The WordPress database is needed only while the command runs; the `web` service starts without it.
@@ -192,7 +221,7 @@ docker compose exec web python manage.py import_wordpress         # import / re-
 docker compose exec web python manage.py import_wordpress --prune # also delete what WordPress no longer has
 ```
 
-The command prints a summary of created / updated / unchanged / missing rows per entity, plus any reviews it skipped, reviewer-name mismatches and unrecognised postmeta keys.
+The command prints a summary of created / updated / unchanged / missing rows per entity, plus any reviews it skipped, reviewer-name mismatches, website URLs it did not store (only `http(s)` URLs are kept, because they are rendered as links) and unrecognised postmeta keys.
 
 **Re-running is safe.**
 

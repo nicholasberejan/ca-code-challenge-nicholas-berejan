@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ brand.name }} | Brand Reviews{% endblock %}
+{% block meta %}<meta name="description" content="{{ brand.short_description }}">{% endblock %}
+{% block content %}
+<article class="brand">
+  <header class="brand-hero">
+    <div class="container">
+      <h1 class="brand-hero__title">{{ brand.name }}</h1>
+      {% if industries %}
+        <ul class="brand-hero__industries" aria-label="Industries">
+          {% for industry in industries %}<li class="badge">{{ industry.name }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      <p class="brand-hero__rating">
+        {% if brand.review_count %}
+          Rated {{ brand.average_rating|floatformat:1 }} out of 5 from {{ brand.review_count }} review{{ brand.review_count|pluralize }}
+        {% else %}
+          No reviews yet
+        {% endif %}
+      </p>
+      <dl class="brand-meta">
+        {% if brand.website_url %}<div><dt>Website</dt><dd><a href="{{ brand.website_url }}" rel="nofollow noopener">{{ brand.website_url }}</a></dd></div>{% endif %}
+        {% if brand.founded_year %}<div><dt>Founded</dt><dd>{{ brand.founded_year }}</dd></div>{% endif %}
+        {% if brand.headquarters %}<div><dt>Headquarters</dt><dd>{{ brand.headquarters }}</dd></div>{% endif %}
+      </dl>
+    </div>
+  </header>
+  <div class="brand-body container">
+    {# Sanitized at import (content/sanitize.py); the only HTML rendered as markup. #}
+    <div class="brand-body__content">{{ brand.content|safe }}</div>
+  </div>
+  <section class="reviews-section container" aria-labelledby="reviews-title">
+    <h2 id="reviews-title">Customer reviews</h2>
+    {% for review in reviews %}
+      {% include "content/_review_summary.html" with show_brand=False excerpt=True %}
+    {% empty %}
+      <p>No reviews yet.</p>
+    {% endfor %}
+  </section>
+</article>
+{% endblock %}

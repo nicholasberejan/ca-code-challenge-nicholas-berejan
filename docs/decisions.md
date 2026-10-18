@@ -151,7 +151,7 @@ The snippet contains the review's slug, title, rating, reviewer display name, an
 - Highest-rated review: simple, deterministic and easy to document, but rejected because it systematically favors the brand.
 - "Closest without going over" (always prefer a below-mean review): rejected because it picks a below-mean review even when an above-mean review is objectively closer.
 
-**Tradeoffs:** for a brand with split opinions (all 1s and 5s), the closest review may not represent anyone's actual experience, and the pick may be a bland middle-of-the-road review. With more time: show one positive and one critical review per card.
+**Tradeoffs:** for a brand with split opinions (all 1s and 5s), the closest review may not represent anyone's actual experience, and the pick may be a bland middle-of-the-road review. With more time: show one positive and one critical review per card. At scale, selection moves into the database, like the average: a stored copy of each brand's top review updated on import (reviews only change through the import), or one PostgreSQL `DISTINCT ON` query per page. Today the winners are chosen in Python from the current page's review ratings, which is exact and takes a constant number of queries but reads every review of those brands.
 
 ### Average rating representation and sorting
 
@@ -185,7 +185,7 @@ Each brand row returns `industries: [{slug, name}]`. Filtering by industry match
 - Filter: `industry=<slug>`, repeatable (matches brands in any of the given industries). An unknown slug returns 400, because industries are a closed, known set.
 - Sort: `ordering=average_rating|-average_rating|review_count|-review_count`. Default is `-average_rating`, with slug as the tie-break.
 - Pagination: `page` and `page_size` (default 12, maximum 50). The response envelope is `{count, next, previous, results}`.
-- Errors: an invalid parameter returns 400 with `{"errors": {"<param>": ["..."]}}`. An out-of-range page returns 404.
+- Errors: an invalid parameter returns 400 with `{"errors": {"<param>": ["..."]}}`. An out-of-range page returns 404. Every error returned by an API view uses this one shape: invalid parameters (400), an out-of-range page (404), and errors DRF raises itself (405, 406, and later 401/403). Errors not tied to a parameter or field use the key `detail`, e.g. `{"errors": {"detail": ["Method \"POST\" not allowed."]}}`. One DRF exception handler applies it. Not covered: URLs that match no API route (Django's 404 page) and unhandled server errors (500).
 
 ### Why this contract shape
 

@@ -1,0 +1,23 @@
+{% load static %}<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Brand Reviews{% endblock %}</title>
+    {% block meta %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'frontend/main.css' %}">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    {% include "partials/header.html" %}
+    <main id="main" class="site-main">
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="site-footer">
+      <div class="container">
+        <p>Brand Reviews: independent customer reviews.</p>
+      </div>
+    </footer>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

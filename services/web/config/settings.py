@@ -40,6 +40,29 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
 ]
 
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": ["django.template.context_processors.request"],
+        },
+    }
+]
+
+# The public API is read-only and needs no authentication. No authentication
+# class is configured globally, so public endpoints can never inherit one.
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+    "UNAUTHENTICATED_USER": None,
+    # Every DRF error uses the API's {"errors": {...}} shape.
+    "EXCEPTION_HANDLER": "core.api_errors.api_exception_handler",
+}
+
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 

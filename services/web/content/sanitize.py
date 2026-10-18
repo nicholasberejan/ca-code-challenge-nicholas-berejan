@@ -60,3 +60,16 @@ def summarize(value: str, words: int = SHORT_DESCRIPTION_WORDS) -> str:
     if len(parts) <= words:
         return " ".join(parts)
     return " ".join(parts[:words]) + "…"
+
+
+SNIPPET_CHARACTERS = 160
+
+
+def snippet(value: str, limit: int = SNIPPET_CHARACTERS) -> str:
+    """Plain text from HTML, cut at a word boundary to at most `limit`
+    characters plus an ellipsis when truncated."""
+    text = html_to_text(value)
+    if len(text) <= limit:
+        return text
+    cut = text[: limit + 1].rsplit(" ", 1)[0] if " " in text[:limit] else text[:limit]
+    return cut.rstrip(" ,.;:") + "…"

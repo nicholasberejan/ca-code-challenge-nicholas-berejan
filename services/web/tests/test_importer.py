@@ -128,6 +128,39 @@ def test_blank_optional_brand_meta_is_imported_as_empty():
     assert acme.legacy_average_rating is None
 
 
+@pytest.mark.parametrize(
+    ("source_url", "stored"),
+    [
+        ("https://acme.example.com", "https://acme.example.com"),
+        ("http://acme.example.com", "http://acme.example.com"),
+        ("javascript:alert(1)", ""),
+        (" JavaScript:alert(1)", ""),
+        ("data:text/html,<script>x</script>", ""),
+        ("acme.example.com", ""),
+        ("//acme.example.com", ""),
+        ("https:", ""),
+    ],
+)
+def test_only_http_website_urls_are_stored_and_others_are_reported(source_url, stored):
+    report = import_snapshot(
+        snapshot(brands=[brand(meta={**brand().meta, "website_url": source_url})])
+    )
+
+    assert Brand.objects.get(wp_post_id=7).website_url == stored
+    expected = [] if stored else [(7, source_url.strip())]
+    assert report.rejected_urls == expected
+    if expected:
+        assert f"brand 7: {source_url.strip()!r}" in format_report(report)
+
+
+def test_blank_website_url_is_not_reported_as_rejected():
+    report = import_snapshot(
+        snapshot(brands=[brand(meta={**brand().meta, "website_url": " "})])
+    )
+
+    assert report.rejected_urls == []
+
+
 @pytest.mark.parametrize("bad_rating", ["", "6", "0", "five"])
 def test_invalid_review_rating_aborts_the_import(bad_rating):
     with pytest.raises(SourceDataError, match="rating"):
