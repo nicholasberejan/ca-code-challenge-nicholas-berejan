@@ -397,30 +397,72 @@ def test_top_review_uses_the_exact_mean_not_the_rounded_one(client):
     assert result["top_review"]["rating"] == 4
 
 
-def test_remaining_ties_prefer_the_newest_then_the_lowest_wordpress_id(client):
+def test_equally_close_reviews_prefer_the_newest_even_with_a_higher_wordpress_id(
+    client,
+):
     brand = make_brand("acme")
     reviewer = make_reviewer()
     make_review(
-        brand, 4, published_at=T0, wp_post_id=501, reviewer=reviewer, title="Old"
+        brand, 4, published_at=T0, wp_post_id=499, reviewer=reviewer, title="Old"
     )
     make_review(
         brand,
         4,
         published_at=T0 + timedelta(days=1),
-        wp_post_id=502,
+        wp_post_id=600,
         reviewer=reviewer,
-        title="Newest A",
-    )
-    make_review(
-        brand,
-        4,
-        published_at=T0 + timedelta(days=1),
-        wp_post_id=500,
-        reviewer=reviewer,
-        title="Newest B",
+        title="New",
     )
 
-    assert only(get(client))["top_review"]["title"] == "Newest B"
+    assert only(get(client))["top_review"]["title"] == "New"
+
+
+def test_equally_close_reviews_published_together_prefer_the_lowest_wordpress_id(
+    client,
+):
+    brand = make_brand("acme")
+    reviewer = make_reviewer()
+    for post_id in (702, 701, 703):
+        make_review(
+            brand,
+            4,
+            published_at=T0,
+            wp_post_id=post_id,
+            reviewer=reviewer,
+            title=f"Post {post_id}",
+        )
+
+    assert only(get(client))["top_review"]["title"] == "Post 701"
+
+
+def test_each_brand_on_a_page_gets_its_own_top_review(client):
+    # Each brand's winner is worked out by hand from its own reviews; mixing
+    # up brands' counts and sums, or picking one winner for the page, changes
+    # at least one of them.
+    expected = {}
+    for slug, ratings, winner in [
+        # Reviews are one day apart, so a higher index is newer.
+        ("alpha", [3, 4, 4, 4, 3], 3),  # mean 3.6: the 4s win; newest 4 is index 3
+        ("bravo", [5, 5, 1], 1),  # mean 3.67: the 5s (1.33 away) beat the 1; newest 5
+        ("charlie", [2, 3], 0),  # mean 2.5: tie, lower rating (the 2) wins
+    ]:
+        brand = make_brand(slug)
+        reviewer = make_reviewer()
+        reviews = [
+            make_review(
+                brand,
+                rating,
+                published_at=T0 + timedelta(days=i),
+                reviewer=reviewer,
+                title=f"{slug}-{i}",
+            )
+            for i, rating in enumerate(ratings)
+        ]
+        expected[slug] = reviews[winner].title
+
+    results = get(client, "?ordering=review_count").json()["results"]
+
+    assert {b["slug"]: b["top_review"]["title"] for b in results} == expected
 
 
 def test_top_review_snippet_is_plain_text_of_about_160_characters(client):

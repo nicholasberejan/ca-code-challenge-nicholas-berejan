@@ -3,7 +3,7 @@
 import pytest
 
 from content.models import Brand, Review
-from content.sanitize import html_to_text, sanitize_html, summarize
+from content.sanitize import html_to_text, sanitize_html, snippet, summarize
 from content.wordpress.importer import import_snapshot
 
 from .snapshots import brand, review, snapshot
@@ -134,3 +134,37 @@ def test_summarize_truncates_to_22_words_with_ellipsis():
 
     assert summarize(f"<p>{words}</p>") == " ".join(f"w{i}" for i in range(22)) + "…"
     assert summarize("<p>short text</p>") == "short text"
+
+
+# Words end at offsets 8, 15, 22, ... so position 160 falls inside a word:
+# a plain 160-character cut would end mid-word.
+LONG_TEXT = "a " + " ".join(f"word{i:02d}" for i in range(40))
+
+
+def test_snippet_keeps_short_text_unchanged_without_ellipsis():
+    assert snippet("<p>Short &amp; <em>sweet</em>.</p>") == "Short & sweet."
+
+
+def test_snippet_keeps_text_of_exactly_160_characters():
+    text = "a" * 160
+
+    assert snippet(f"<p>{text}</p>") == text
+
+
+def test_snippet_cuts_long_text_close_to_160_characters_at_a_word_boundary():
+    result = snippet(f"<p>{LONG_TEXT}</p>")
+
+    assert result.endswith("\u2026")
+    cut = result.removesuffix("\u2026")
+    assert 150 <= len(cut) <= 160
+    assert LONG_TEXT.startswith(cut + " ")  # ends on a whole word
+
+
+def test_snippet_cuts_text_one_character_over_the_limit():
+    text = "a" * 156 + " bcde"  # 161 characters
+
+    assert snippet(text) == "a" * 156 + "\u2026"
+
+
+def test_snippet_cuts_a_long_run_without_spaces_at_160_characters():
+    assert snippet("x" * 300) == "x" * 160 + "\u2026"

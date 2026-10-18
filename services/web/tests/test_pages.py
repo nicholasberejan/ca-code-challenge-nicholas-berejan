@@ -254,3 +254,19 @@ def test_plain_text_fields_are_escaped_and_only_bodies_render_html(client):
     assert "&lt;img src=x onerror=alert(1)&gt;" in pages[1]
     assert "<p>Safe body</p>" in pages[0]
     assert "<p>Plain &amp; safe</p>" in pages[1]
+
+
+def test_entity_encoded_markup_in_review_excerpts_stays_escaped(client):
+    # The excerpt is plain text decoded from the stored HTML, so `&lt;script&gt;`
+    # in the body becomes the text "<script>"; only autoescaping keeps it inert.
+    brand = make_brand("acme")
+    make_review(
+        brand,
+        3,
+        content="<p>&lt;script&gt;alert(1)&lt;/script&gt; and more</p>",
+    )
+
+    for path in ["/", "/brand/acme/"]:
+        page = html(client.get(path))
+        assert "<script>alert(1)" not in page
+        assert "&lt;script&gt;alert(1)&lt;/script&gt; and more" in page
