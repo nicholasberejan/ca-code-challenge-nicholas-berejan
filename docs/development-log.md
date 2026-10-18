@@ -156,3 +156,43 @@ implementation steps, and accepted suggestions are intentionally omitted.
 - **The read-only guarantee was tested by removing it.** The test that the
   WordPress connection rejects writes was confirmed to pass only because of
   the read-only session setting: without it, the same statement is accepted.
+
+### 2026-10-17: Phase 3 (public pages and API) findings
+
+- **Rendering exposed a gap the import phase had missed.** Sanitizing body
+  HTML at import (decisions §9) did not cover a plain-text field later
+  rendered as a link: an ACF `website_url` of `javascript:…` would have been
+  escaped but still clickable. Found while writing the brand template; the
+  importer now keeps only `http(s)` URLs with a host. Lesson: the trust
+  boundary covers every field that ends up in an attribute, not only the HTML
+  bodies.
+- **The independent reviewer caught two things passing tests could not.**
+  The URL fix silently dropped rejected values, unlike every other anomaly
+  the importer reports; and the README claimed brands without reviews sort
+  last for every ordering, while the (correct) code and tests sort them first
+  for ascending `review_count`. Both were fixed: rejected URLs are now
+  reported, and the README matches the tested behaviour.
+- **Key invariants were checked by breaking them.** Replacing the industry
+  subquery with a plain join, or making top-review selection prefer
+  below-mean ratings ("closest without going over"), each made the intended
+  tests fail.
+
+### 2026-10-18: Independent test auditor
+
+- **Reviewing every generated test by hand does not scale,** and the agent
+  that wrote an implementation should not be the only judge of the tests it
+  wrote for it. A second read-only subagent, `test-auditor`, now audits the
+  test evidence alongside the general `reviewer`.
+- **It reasons from requirements to evidence.** It maps the acceptance
+  criteria and decisions the change touches to the tests that actually
+  exist, and asks of each regression test whether it would fail if the bug
+  came back. Behavioral and acceptance-criteria coverage is the measure, not
+  a line-coverage target.
+- **It looks specifically for gamed tests:** weakened assertions, expected
+  values changed to match output, deleted or skipped tests, mocking that
+  bypasses the behavior under test, and verification that no longer runs the
+  required tests.
+- **Read-only, and humans still spot-check.** It recommends tests but never
+  writes or edits them; high-risk tests can still get targeted human review.
+  As with the reviewer, invoking it is an instruction in `CLAUDE.md`; a hook
+  will be added only if agents are observed skipping it.

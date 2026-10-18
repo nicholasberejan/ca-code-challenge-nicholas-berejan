@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Brands | Brand Reviews{% endblock %}
+{% block content %}
+<section class="section container" aria-labelledby="brands-title">
+  <h1 id="brands-title">Brands</h1>
+  {# <BrandList /> mounts here and loads its data from /api/brands/. #}
+  <div id="brand-list"></div>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'frontend/brand-list.js' %}"></script>{% endblock %}
