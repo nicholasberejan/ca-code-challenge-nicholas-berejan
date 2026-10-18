@@ -1,13 +1,13 @@
 import { useEffect, useRef } from "react";
 
-import { brandsUrl, PAGE_SIZE, type BrandQuery } from "../api";
+import { brandsUrl, type BrandQuery } from "../api";
 import { useBrands } from "../hooks/useBrands";
 import { useIndustries } from "../hooks/useIndustries";
 import { useUrlParams } from "../hooks/useUrlParams";
 import { toSearch } from "../urlState";
-import { BrandCard } from "./BrandCard";
+import { BrandResults } from "./BrandResults";
 import { IndustryFilter } from "./IndustryFilter";
-import { Pagination } from "./Pagination";
+import { LoadError } from "./LoadError";
 import { SortSelect } from "./SortSelect";
 
 /**
@@ -83,7 +83,6 @@ export function BrandList() {
   };
 
   const data = brands.data;
-  const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
   const countText = data
     ? `${data.count} brand${data.count === 1 ? "" : "s"}`
     : "";
@@ -131,54 +130,21 @@ export function BrandList() {
       )}
 
       {brands.status === "error" && !outOfRange && !rejectedIndustry && (
-        <div className="brand-list__message" role="alert">
-          <p>The brands could not be loaded.</p>
-          <button type="button" className="button" onClick={brands.retry}>
-            Retry
-          </button>
-        </div>
+        <LoadError
+          message="The brands could not be loaded."
+          onRetry={brands.retry}
+        />
       )}
 
       {data && brands.status !== "error" && brands.status !== "loading" && (
-        <div
-          className={`brand-list__results${
-            brands.status === "refreshing" ? " brand-list__results--busy" : ""
-          }`}
-          aria-busy={brands.status === "refreshing"}
-        >
-          {data.results.length === 0 ? (
-            <div className="brand-list__message">
-              <p>No brands match{industry ? " this industry" : ""}.</p>
-              {industry && (
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => change({ industry: null })}
-                >
-                  Show all industries
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <ul className="grid">
-                {data.results.map((brand) => (
-                  <li key={brand.slug}>
-                    <BrandCard brand={brand} />
-                  </li>
-                ))}
-              </ul>
-              <Pagination
-                page={query.page}
-                totalPages={totalPages}
-                hasPrevious={data.previous !== null}
-                hasNext={data.next !== null}
-                onPrevious={() => goToPage(query.page - 1)}
-                onNext={() => goToPage(query.page + 1)}
-              />
-            </>
-          )}
-        </div>
+        <BrandResults
+          data={data}
+          pageNumber={query.page}
+          busy={brands.status === "refreshing"}
+          canClearFilter={industry !== null}
+          onClearFilter={() => change({ industry: null })}
+          onPageChange={goToPage}
+        />
       )}
     </div>
   );

@@ -662,6 +662,29 @@ describe("pagination", () => {
     expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
   });
 
+  it.each([
+    [12, 1],
+    [24, 2],
+    [25, 3],
+  ])(
+    "counts pages exactly: %i brands make %i page(s)",
+    async (count, pages) => {
+      const brands = Array.from({ length: count }, (_, i) =>
+        makeBrand(i + 1, [INSURANCE]),
+      );
+      brandHandler = (url) => brandPage(url, brands);
+      const user = setup();
+      await loaded();
+
+      expect(screen.getByText(`Page 1 of ${pages}`)).toBeInTheDocument();
+      for (let page = 2; page <= pages; page++) {
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await screen.findByText(`Page ${page} of ${pages}`);
+      }
+      expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    },
+  );
+
   it("can be paged with the keyboard alone", async () => {
     const user = setup();
     await loaded();

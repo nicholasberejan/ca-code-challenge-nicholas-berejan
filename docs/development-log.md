@@ -225,3 +225,21 @@ implementation steps, and accepted suggestions are intentionally omitted.
   `scripts/verify.sh` at once and collided on the shared PostgreSQL test
   database; the test audit came back as a hook failure instead of a report.
   Run the agents one after the other (or tell them not to run `verify.sh`).
+
+### 2026-10-18: Splitting `<BrandList />` further
+
+- **I proposed extracting the loading message, the error and the results
+  block into their own components.** I asked whether that was necessary
+  and in line with CHALLENGE.md and React practice. The AI's assessment:
+  CHALLENGE.md sets no internal structure, so it is a clarity question, not
+  a requirement. The results block (busy wrapper, empty state, grid,
+  pagination) and the error (an alert with Retry) each have a real contract
+  worth naming. The one-line loading message does not, and extracting it
+  would be splitting for symmetry.
+- **Decision:** extract `BrandResults` and `LoadError`; keep the loading
+  message inline; keep every "which state to show" decision in `BrandList`
+  so children never learn about the URL or the API. Recorded in
+  decisions §5.
+- **The tests proved the refactor safe without changing.** Because the
+  BrandList tests query roles, labels and text rather than component
+  structure, all 38 frontend tests passed untouched after the extraction.
