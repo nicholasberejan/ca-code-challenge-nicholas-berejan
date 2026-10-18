@@ -269,3 +269,27 @@ implementation steps, and accepted suggestions are intentionally omitted.
   README still called login and the import unimplemented and listed a
   deferred check that no longer existed, and the expand-then-contract
   process for shared-library breaking changes was not written down.
+
+### 2026-10-18: Phase 6 (acceptance audit and hardening) findings
+
+- **Auditing criteria against tests found claims backed by weaker evidence
+  than they seemed.** "WordPress administrators can sign in to the admin"
+  was only tested with `force_login`, which bypasses the password entirely,
+  and changing roles or deactivating users "through the admin" had no admin
+  test at all. Both now go through the real admin forms, the first with the
+  migrated WordPress password.
+- **Two required behaviours had never been demonstrated end to end:** normal
+  operation with the WordPress database down after import, and each
+  service's independence from the other's database. The end-to-end check now
+  stops WordPress's database too; the database-isolation check was done by
+  hand.
+- **The README had drifted from the deliverable.** It still opened as the
+  WordPress source repository, lacked the two sections CHALLENGE.md asks for
+  ("what would change with more time" and "AI defaults kept over my
+  preference"), and its token example parsed JSON with the host's `python3`
+  despite the Docker-only claim. It was rewritten as the evaluator's entry
+  point, and every command in it was run from a fresh copy of the
+  repository.
+- **The "AI defaults kept" section uses only exchanges that happened:** the
+  wheelhouse over PyPI, plain hooks over SWR/context, opt-in `--prune`, and
+  keeping the loading message inline.

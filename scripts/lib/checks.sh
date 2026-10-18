@@ -116,6 +116,11 @@ django_tests() {
 # second run would create, update or delete anything.
 import_idempotency() {
   start_wordpress_db
+  # One-off containers skip the services' startup migrate; a fresh clone may
+  # never have started them.
+  step "Migrate both development databases"
+  in_service_with_db web python manage.py migrate --noinput
+  in_service_with_db auth python manage.py migrate --noinput
   step "WordPress content import, then idempotent re-import (import_wordpress)"
   in_service_with_db web python manage.py import_wordpress
   in_service_with_db web python manage.py import_wordpress --expect-unchanged
@@ -137,13 +142,17 @@ auth_flow_e2e() {
   run docker compose up -d web auth
   run wait_for_services
   E2E_STATE="$(mktemp -d)"
-  trap 'e2e_flow cleanup >/dev/null 2>&1 || true; docker compose start auth >/dev/null 2>&1 || true; rm -rf "$E2E_STATE"' EXIT
+  trap 'e2e_flow cleanup >/dev/null 2>&1 || true; docker compose start auth db >/dev/null 2>&1 || true; rm -rf "$E2E_STATE"' EXIT
   run e2e_flow main
   step "End-to-end: auth service stopped (public reads, PATCH with a valid token)"
   run docker compose stop auth
   run e2e_flow outage
   run docker compose start auth
   run wait_for_services
+  step "End-to-end: WordPress database stopped (only the imports need it)"
+  run docker compose stop db
+  run e2e_flow wordpress-outage
+  run docker compose up -d --wait db
   step "End-to-end: edited description survives import_wordpress"
   run docker compose exec -T web python manage.py import_wordpress
   run e2e_flow verify

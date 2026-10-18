@@ -72,5 +72,5 @@ lock:
 
 import:
 	$(COMPOSE) up -d --wait db
-	$(COMPOSE) run --rm web python manage.py import_wordpress
-	$(COMPOSE) run --rm auth python manage.py import_wordpress_users
+	$(COMPOSE) run --rm web sh -c "python manage.py migrate --noinput -v0 && python manage.py import_wordpress"
+	$(COMPOSE) run --rm auth sh -c "python manage.py migrate --noinput -v0 && python manage.py import_wordpress_users"
