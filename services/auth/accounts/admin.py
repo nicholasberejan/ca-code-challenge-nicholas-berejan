@@ -29,9 +29,14 @@ class UserAdmin(BaseUserAdmin):
 
     @admin.display(description="Roles")
     def group_names(self, user: User) -> str:
-        return ", ".join(sorted(user.groups.values_list("name", flat=True)))
+        return ", ".join(sorted(group.name for group in user.groups.all()))
 
-    @admin.action(description="Revoke all sessions (refresh tokens)")
+    def get_queryset(self, request: HttpRequest) -> QuerySet[User]:
+        return super().get_queryset(request).prefetch_related("groups")
+
+    @admin.action(
+        description="Revoke all sessions (refresh tokens)", permissions=["change"]
+    )
     def revoke_sessions(self, request: HttpRequest, users: QuerySet[User]) -> None:
         revoked = sum(revoke_all_sessions(user) for user in users)
         self.message_user(

@@ -10,11 +10,12 @@ import jwt
 import pytest
 from django.conf import settings
 from django.contrib.auth.models import Group
+from rest_framework_simplejwt.tokens import RefreshToken
 from shared_auth.tokens import InvalidToken, verify_token
 
 from accounts.models import User
 from accounts.roles import set_role
-from accounts.tokens import revoke_all_sessions
+from accounts.tokens import TokenRejected, _consume, issue_tokens, revoke_all_sessions
 
 pytestmark = pytest.mark.django_db
 
@@ -182,9 +183,25 @@ def test_deleted_user_cannot_refresh(client):
     assert refresh(client, tokens["refresh"]).status_code == 401
 
 
-@pytest.mark.parametrize("token", ["", "garbage", "a.b.c"])
-def test_malformed_refresh_tokens_are_rejected(client, token):
-    assert refresh(client, token).status_code in (400, 401)
+@pytest.mark.parametrize(
+    ("token", "status"), [("", 400), ("garbage", 401), ("a.b.c", 401)]
+)
+def test_malformed_refresh_tokens_are_rejected(client, token, status):
+    assert refresh(client, token).status_code == status
+
+
+def test_a_refresh_token_can_be_consumed_only_once_even_if_already_verified():
+    # Two simultaneous refreshes both pass RefreshToken()'s blacklist check
+    # before either blacklists the token; the locked re-check in _consume is
+    # what lets only one of them through.
+    make_user()
+    raw = issue_tokens(User.objects.get()).refresh
+    first, second = RefreshToken(raw), RefreshToken(raw)
+
+    _consume(first)
+
+    with pytest.raises(TokenRejected, match="already used"):
+        _consume(second)
 
 
 def test_access_token_is_not_accepted_for_refresh(client):

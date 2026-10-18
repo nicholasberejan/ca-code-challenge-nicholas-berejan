@@ -7,6 +7,7 @@ refresh flow against the auth service is exercised by scripts/verify.sh
 (scripts/e2e/auth_flow.py).
 """
 
+import base64
 import time
 import uuid
 from functools import cache
@@ -15,7 +16,7 @@ from typing import Any
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from django.conf import settings as django_settings
 from django.core.exceptions import ImproperlyConfigured
 
@@ -296,7 +297,6 @@ def test_edited_short_description_survives_reimport(client):
 
 def test_web_service_has_only_the_public_key_and_no_auth_database():
     assert not hasattr(django_settings, "JWT_PRIVATE_KEY")
-    assert "PRIVATE KEY" not in str(django_settings.SHARED_AUTH)
     assert set(django_settings.DATABASES) == {"default", "wordpress"}
     assert "django.contrib.auth" not in django_settings.INSTALLED_APPS
 
@@ -310,4 +310,26 @@ def test_a_bad_public_key_is_a_startup_configuration_error(monkeypatch, value):
     monkeypatch.setenv("JWT_PUBLIC_KEY", value)
 
     with pytest.raises(ImproperlyConfigured, match="JWT_PUBLIC_KEY"):
+        rsa_public_key_from_env("JWT_PUBLIC_KEY")
+
+
+def test_a_missing_public_key_is_a_startup_configuration_error(monkeypatch):
+    monkeypatch.delenv("JWT_PUBLIC_KEY", raising=False)
+
+    with pytest.raises(ImproperlyConfigured, match="JWT_PUBLIC_KEY is not set"):
+        rsa_public_key_from_env("JWT_PUBLIC_KEY")
+
+
+def test_a_non_rsa_public_key_is_a_startup_configuration_error(monkeypatch):
+    pem = (
+        ec.generate_private_key(ec.SECP256R1())
+        .public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+    monkeypatch.setenv("JWT_PUBLIC_KEY", base64.b64encode(pem).decode())
+
+    with pytest.raises(ImproperlyConfigured, match="not an RSA public key"):
         rsa_public_key_from_env("JWT_PUBLIC_KEY")

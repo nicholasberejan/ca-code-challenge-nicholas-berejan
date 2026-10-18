@@ -16,7 +16,7 @@ help:
 	@echo "  dump            Export current DB to db/dump.sql"
 	@echo "  status          Show running services"
 	@echo ""
-	@echo "  import          Import WordPress content into the main app (needs the db service)"
+	@echo "  import          Import WordPress content (web) and users (auth); needs the db service"
 	@echo "  hooks           Enable the repository's git hooks (run once per clone)"
 	@echo "  test            Run every test suite"
 	@echo "  verify-fast     Lint, format, types and unit tests (runs on every commit)"
@@ -73,3 +73,4 @@ lock:
 import:
 	$(COMPOSE) up -d --wait db
 	$(COMPOSE) run --rm web python manage.py import_wordpress
+	$(COMPOSE) run --rm auth python manage.py import_wordpress_users
