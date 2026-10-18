@@ -1,1 +1,8 @@
-// components partials are forwarded here as they are added.
+@forward "button";
+@forward "card";
+@forward "content-panel";
+@forward "stars";
+@forward "badge";
+@forward "review-item";
+@forward "pagination";
+@forward "brand-list";

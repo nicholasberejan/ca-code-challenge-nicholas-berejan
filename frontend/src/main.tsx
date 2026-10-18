@@ -1,14 +1,14 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
+import { BrandList } from "./components/BrandList";
 
 const container = document.getElementById("brand-list");
 
 if (container) {
   createRoot(container).render(
     <StrictMode>
-      <App />
+      <BrandList />
     </StrictMode>,
   );
 }

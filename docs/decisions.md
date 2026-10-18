@@ -233,6 +233,14 @@ Each brand row returns `industries: [{slug, name}]`. Filtering by industry match
 
 **Decision:** the URL owns the user's choices (filter, sort, page); a small `useUrlParams` hook reads and writes them. Fetched data comes from small custom hooks (`useBrands(params)`, `useIndustries()`) using `fetch` with an `AbortController`, so a slow, stale response can never overwrite a newer one. Each hook exposes explicit loading, error, empty and loaded states. `BrandList` owns the hooks and passes values down as props to small presentational children (`IndustryFilter`, `SortSelect`, `BrandCard`, `Pagination`).
 
+**Component split:** `BrandList` stays the orchestrator: it owns the URL state, the data hooks and every URL- or API-dependent decision about which state to show (including the URL fallbacks that suppress an error). Its presentational children receive plain props and know nothing about the URL or the API:
+
+- `IndustryFilter`, `SortSelect`: the controls.
+- `BrandResults`: a loaded page: the busy wrapper (`aria-busy`), the empty state with its clear-filter action, the card grid (`BrandCard`) and `Pagination`.
+- `LoadError`: a failed request (`role="alert"`, message, Retry).
+
+The one-line loading message stays inline in `BrandList`: it has no logic, and extracting it would only add a component for symmetry.
+
 **Alternatives considered:**
 
 - SWR / TanStack Query: rejected as overkill. Their caching, de-duplication and revalidation don't pay for a dependency with one component and two endpoints. Switching later would only change the inside of `useBrands`.

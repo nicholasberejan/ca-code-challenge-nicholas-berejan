@@ -1,0 +1,47 @@
+@use "../abstracts" as *;
+
+.site-header {
+  background: token(color, surface);
+  border-bottom: 1px solid token(color, border);
+  padding: token(space, 4) 0;
+}
+
+.site-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: token(space, 6);
+
+  @include below(sm) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: token(space, 3);
+  }
+}
+
+.site-title {
+  margin: 0;
+  color: token(color, text);
+  font-size: token(font-size, xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.site-nav__list {
+  display: flex;
+  gap: token(space, 5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: token(font-size, base);
+}
+
+.site-nav__link {
+  color: token(color, text);
+  font-weight: 500;
+
+  &:hover,
+  &[aria-current="page"] {
+    color: token(color, primary);
+  }
+}

@@ -5,7 +5,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
 
 from content.models import Brand, Review
-from content.queries import with_review_stats
+from content.queries import rounded_average, with_review_stats
 
 RECENT_REVIEWS = 6
 
@@ -34,7 +34,14 @@ def brand_detail(request: HttpRequest, slug: str) -> HttpResponse:
     return render(
         request,
         "content/brand_detail.html",
-        {"brand": brand, "industries": industries, "reviews": reviews},
+        {
+            "brand": brand,
+            "industries": industries,
+            "reviews": reviews,
+            # The API's two-decimal average; the stars tag shows it to one
+            # decimal, rounding half up like the React cards.
+            "display_rating": rounded_average(brand.rating_sum, brand.review_count),
+        },
     )
 
 

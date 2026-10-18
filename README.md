@@ -57,15 +57,20 @@ All checks run in containers. `make verify` lists checks that are deferred until
 
 ### Frontend and SCSS
 
-The production build (React bundle `brand-list.js` and compiled SCSS `main.css`) happens inside the `web` image build, and Django serves it under `/static/frontend/`. To work on the frontend with the on-demand `frontend` container:
+`frontend/` holds the React + TypeScript `<BrandList />` (`src/`) and the site's SCSS (`scss/`), both built by Vite. The production build (`brand-list.js` and `main.css`) runs inside the `web` image build, and Django serves it under `/static/frontend/`: every server-rendered page loads `main.css`, and `/brand/` mounts `<BrandList />` into `<div id="brand-list">`.
+
+`<BrandList />` reads `GET /api/industries/` for its filter options and `GET /api/brands/` for results. Filter, sort and page live in the URL (`?industry=insurance&ordering=-review_count&page=2`, same names as the API, defaults omitted), so links can be shared and Back/Forward work.
+
+The SCSS is the WordPress theme (`reference/theme.css`) rebuilt as `abstracts/` (tokens, breakpoint mixin), `base/`, `layout/`, `components/` and `pages/` partials; `main.scss` only composes them. Every design value is defined once in `abstracts/_tokens.scss` and emitted as a CSS custom property; Stylelint enforces `@use`, BEM class names, nesting depth 2, media queries through the mixin, and no element selectors in components.
+
+On-demand frontend container (the `tools` profile):
 
 ```bash
-docker compose run --rm frontend npm run build      # compile SCSS + bundle into frontend/dist
 docker compose run --rm frontend npm run test       # Vitest
-docker compose run --rm --service-ports frontend npm run dev   # Vite dev server on :5173
+docker compose run --rm frontend npm run build      # compile SCSS + bundle into frontend/dist
+docker compose run --rm --service-ports frontend npm run dev   # Vite dev server on :5173, /api proxied to web
+docker compose build web                            # serve frontend changes from Django
 ```
-
-Rebuild the `web` image (`docker compose build web`) to serve frontend changes from Django.
 
 ### Shared library
 
@@ -188,7 +193,7 @@ All of these are public and work without the auth service.
 | Route | Content |
 |---|---|
 | `/` | Hero and the 6 most recent reviews |
-| `/brand/` | Brand listing page (host for the React `<BrandList />`, not built yet) |
+| `/brand/` | Brand listing: the React `<BrandList />` (industry filter, sort, pagination), fed by the two APIs below |
 | `/brand/<slug>/` | Brand: industries, rating from its reviews, website, founded, headquarters, description, all reviews |
 | `/review/<slug>/` | Review: brand link, rating, reviewer, location, date, body |
 | `GET /api/brands/` | Paginated brand cards (below) |

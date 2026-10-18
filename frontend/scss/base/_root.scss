@@ -1,7 +1,13 @@
+// Emits every design token as a CSS custom property.
+@use "sass:meta";
 @use "../abstracts" as *;
 
 :root {
-  @each $name, $value in $colors {
-    --color-#{$name}: #{$value};
+  @each $name, $value in custom-properties() {
+    --#{$name}: #{meta.inspect($value)};
+  }
+
+  @each $alias, $name in $theme-aliases {
+    --#{$alias}: var(--#{$name});
   }
 }

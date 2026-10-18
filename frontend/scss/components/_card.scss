@@ -1,0 +1,56 @@
+@use "../abstracts" as *;
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: token(space, 2);
+  height: 100%;
+  padding: token(space, 6);
+  border: 1px solid token(color, border);
+  border-radius: token(radius, md);
+  background: token(color, surface);
+  box-shadow: token(shadow, sm);
+  transition:
+    box-shadow 0.15s,
+    transform 0.15s;
+
+  &:hover {
+    box-shadow: token(shadow, md);
+    transform: translateY(-1px);
+  }
+}
+
+.card__title {
+  margin: 0;
+  font-size: token(font-size, lg);
+  font-weight: 600;
+}
+
+.card__title-link {
+  color: token(color, text);
+}
+
+.card__meta {
+  margin: 0;
+  color: token(color, muted);
+  font-size: token(font-size, sm);
+}
+
+.card__excerpt {
+  margin: 0;
+  color: token(color, text-soft);
+  font-size: token(font-size, md);
+}
+
+.card__quote {
+  margin: token(space, 1) 0 0;
+  padding-top: token(space, 3);
+  border-top: 1px solid token(color, border);
+  color: token(color, text-soft);
+  font-size: token(font-size, sm);
+}
+
+.card__quote-title {
+  margin: 0 0 token(space, 1);
+  font-weight: 600;
+}

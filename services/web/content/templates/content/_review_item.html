@@ -1,0 +1,10 @@
+{% load content_text %}
+<article class="review-item">
+  <div class="review-item__head">
+    <h3 class="review-item__title"><a class="review-item__title-link" href="{% url 'review-detail' review.slug %}">{{ review.title }}</a></h3>
+    {% stars review.rating show_value=False %}
+  </div>
+  <p class="review-item__byline">{{ review.reviewer.display_name }}{% if review.reviewer_location %}, {{ review.reviewer_location }}{% endif %} &middot; <time datetime="{{ review.published_at|date:'c' }}">{{ review.published_at|date:'j F Y' }}</time></p>
+  {# Sanitized at import (content/sanitize.py); rendered as markup. #}
+  <div class="review-item__body">{{ review.content|safe }}</div>
+</article>

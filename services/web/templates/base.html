@@ -10,12 +10,12 @@
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     {% include "partials/header.html" %}
-    <main id="main" class="site-main">
+    <main id="main">
       {% block content %}{% endblock %}
     </main>
     <footer class="site-footer">
       <div class="container">
-        <p>Brand Reviews: independent customer reviews.</p>
+        <p class="site-footer__text">Brand Reviews: independent customer reviews.</p>
       </div>
     </footer>
     {% block scripts %}{% endblock %}

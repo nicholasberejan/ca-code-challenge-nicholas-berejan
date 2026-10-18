@@ -1,0 +1,15 @@
+@use "../abstracts" as *;
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: token(space, 3);
+  margin: token(space, 6) 0 0;
+}
+
+.pagination__status {
+  margin: 0;
+  color: token(color, muted);
+  font-size: token(font-size, md);
+}

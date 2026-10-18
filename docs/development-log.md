@@ -196,3 +196,50 @@ implementation steps, and accepted suggestions are intentionally omitted.
   writes or edits them; high-risk tests can still get targeted human review.
   As with the reviewer, invoking it is an instruction in `CLAUDE.md`; a hook
   will be added only if agents are observed skipping it.
+
+### 2026-10-18: Phase 4 (SCSS and BrandList) findings
+
+- **Passing tests missed an accessibility requirement; the reviewer caught
+  it.** The live region kept the old count while results refreshed, so a
+  sort or page change that left the count unchanged was never announced.
+  The only announcement test used a filter change that altered the count.
+  The announcement is now emptied during each request and refilled when it
+  completes, with a test for an unchanged count.
+- **The test auditor found three criteria only partly proven:** abort was
+  never asserted (the stale-response tests also pass with a request-ID
+  guard and no abort), the Back test never crossed the filter change itself,
+  and one-decimal rounding was only tested away from half-way values. That
+  last gap hid a real inconsistency: the cards used `toFixed` (1.15 to 1.1)
+  while the brand page rounded half up. Both now round the API's two-decimal
+  value half up, tested at the boundaries on each side.
+- **Mutation checks exposed a test-fixture blind spot.** The fake `fetch`
+  ignored abort signals, so removing the "ignore failures from stale
+  requests" guard broke nothing. A test for a stale request that fails after
+  newer results arrived now covers it.
+- **The reviewer also caught non-functional issues tests cannot:** an amber
+  focus ring at about 2:1 contrast (now dark teal, white on the hero), and
+  the review page depending on the brand page's partial (now a shared
+  `content-panel` component).
+- **Running the two review agents in parallel broke verification.** Each
+  headless review session runs the project's Stop hook, so two sessions ran
+  `scripts/verify.sh` at once and collided on the shared PostgreSQL test
+  database; the test audit came back as a hook failure instead of a report.
+  Run the agents one after the other (or tell them not to run `verify.sh`).
+
+### 2026-10-18: Splitting `<BrandList />` further
+
+- **I proposed extracting the loading message, the error and the results
+  block into their own components.** I asked whether that was necessary
+  and in line with CHALLENGE.md and React practice. The AI's assessment:
+  CHALLENGE.md sets no internal structure, so it is a clarity question, not
+  a requirement. The results block (busy wrapper, empty state, grid,
+  pagination) and the error (an alert with Retry) each have a real contract
+  worth naming. The one-line loading message does not, and extracting it
+  would be splitting for symmetry.
+- **Decision:** extract `BrandResults` and `LoadError`; keep the loading
+  message inline; keep every "which state to show" decision in `BrandList`
+  so children never learn about the URL or the API. Recorded in
+  decisions §5.
+- **The tests proved the refactor safe without changing.** Because the
+  BrandList tests query roles, labels and text rather than component
+  structure, all 38 frontend tests passed untouched after the extraction.

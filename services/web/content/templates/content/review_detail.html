@@ -1,21 +1,24 @@
 {% extends "base.html" %}
+{% load content_text %}
 {% block title %}{{ review.title }} | {{ review.brand.name }} | Brand Reviews{% endblock %}
 {% block content %}
-<article class="review">
+<article>
   <header class="review-hero">
     <div class="container">
-      <p><a class="review-hero__brand-link" href="{% url 'brand-detail' review.brand.slug %}">Back to {{ review.brand.name }}</a></p>
+      <p><a class="review-hero__brand-link" href="{% url 'brand-detail' review.brand.slug %}">&larr; Back to {{ review.brand.name }}</a></p>
       <h1 class="review-hero__title">{{ review.title }}</h1>
-      <p class="review-hero__rating">Rated {{ review.rating }} out of 5</p>
+      {% stars review.rating %}
       <p class="review-hero__byline">
-        By {{ review.reviewer.display_name }}{% if review.reviewer_location %}, {{ review.reviewer_location }}{% endif %},
-        <time datetime="{{ review.published_at|date:'c' }}">{{ review.published_at|date:'j F Y' }}</time>
+        By {{ review.reviewer.display_name }}{% if review.reviewer_location %}, {{ review.reviewer_location }}{% endif %}
+        &middot; <time datetime="{{ review.published_at|date:'c' }}">{{ review.published_at|date:'j F Y' }}</time>
       </p>
     </div>
   </header>
-  <div class="review-body container">
-    {# Sanitized at import (content/sanitize.py); the only HTML rendered as markup. #}
-    {{ review.content|safe }}
-  </div>
+  <section class="section" aria-label="Review">
+    <div class="container">
+      {# Sanitized at import (content/sanitize.py); rendered as markup. #}
+      <div class="content-panel">{{ review.content|safe }}</div>
+    </div>
+  </section>
 </article>
 {% endblock %}

@@ -1,6 +1,145 @@
-// Design tokens: every value is defined once here and emitted as a CSS custom
-// property by base/_root.scss. The full token set is added with the theme.
+// Design tokens: every reusable design value is defined once, here.
+// base/_root.scss emits each one as a CSS custom property
+// (--<group>-<name>); partials refer to them with token(<group>, <name>),
+// which fails the build on a misspelled token.
+@use "sass:map";
+
 $colors: (
   "bg": #f7f7f5,
+  "surface": #fff,
   "text": #1a1a1a,
+  "text-strong": #1f2937,
+  "text-soft": #374151,
+  "muted": #6b7280,
+  "border": #e5e7eb,
+  "primary": #0f766e,
+  "primary-dark": #115e59,
+  "primary-deep": #134e4a,
+  "on-primary": #fff,
+  "accent": #f59e0b,
+  "focus": #115e59,
+  "star": #f59e0b,
+  "star-empty": #d1d5db,
+  "badge-bg": #ecfdf5,
+  "badge-border": #d1fae5,
+  "footer-bg": #111827,
+  "footer-text": #d1d5db,
+  "footer-link": #9ca3af,
 );
+
+// Spacing on a 4px grid: token(space, n) is n x 4px. The theme's odd
+// one-off values (14, 18, 22, 28px) are rounded to the nearest step.
+$space: (
+  1: 4px,
+  2: 8px,
+  3: 12px,
+  4: 16px,
+  5: 20px,
+  6: 24px,
+  8: 32px,
+  10: 40px,
+  12: 48px,
+  14: 56px,
+  16: 64px,
+);
+
+// Type scale; h1/h2/title/display are heading sizes.
+$font-sizes: (
+  "xs": 0.78rem,
+  "sm": 0.85rem,
+  "md": 0.9rem,
+  "base": 0.95rem,
+  "body": 1rem,
+  "lg": 1.1rem,
+  "xl": 1.25rem,
+  "h2": 1.5rem,
+  "title": 1.75rem,
+  "h1": 2rem,
+  "display": 2.25rem,
+);
+
+// Corner radii.
+$radii: (
+  "sm": 6px,
+  "md": 10px,
+  "pill": 999px,
+);
+
+// Elevation.
+$shadows: (
+  "sm": 0 1px 2px rgb(0 0 0 / 4%),
+  "md": 0 2px 8px rgb(0 0 0 / 6%),
+);
+
+// Page width and side gutter.
+$layout: (
+  "max-width": 1100px,
+  "gutter": 24px,
+);
+
+// Font stacks.
+$fonts: (
+  "sans": (
+    -apple-system,
+    blinkmacsystemfont,
+    "Segoe UI",
+    roboto,
+    oxygen,
+    ubuntu,
+    cantarell,
+    "Helvetica Neue",
+    arial,
+    sans-serif,
+  ),
+);
+
+// Every token group, by CSS custom-property prefix.
+$tokens: (
+  "color": $colors,
+  "space": $space,
+  "font-size": $font-sizes,
+  "radius": $radii,
+  "shadow": $shadows,
+  "layout": $layout,
+  "font": $fonts,
+);
+
+// var(--<group>-<name>) for a token that exists; a build error otherwise.
+@function token($group, $name) {
+  $values: map.get($tokens, $group);
+
+  @if not $values or not map.has-key($values, $name) {
+    @error "Unknown #{$group} token: #{$name}";
+  }
+
+  @return var(--#{$group}-#{$name});
+}
+
+// The WordPress theme's own custom-property names, kept at runtime as
+// aliases of the tokens that replaced them (docs/decisions.md §6). Names the
+// scheme already reproduces (--color-primary, --shadow-sm, --font-sans, ...)
+// need no alias.
+$theme-aliases: (
+  "color-card": "color-surface",
+  "radius": "radius-md",
+  "shadow": "shadow-md",
+  "max-width": "layout-max-width",
+);
+
+// Every token flattened to ("<group>-<name>": value), for base/_root.scss.
+@function custom-properties() {
+  $properties: ();
+
+  @each $group, $values in $tokens {
+    @each $name, $value in $values {
+      $properties: map.merge(
+        $properties,
+        (
+          "#{$group}-#{$name}": $value,
+        )
+      );
+    }
+  }
+
+  @return $properties;
+}

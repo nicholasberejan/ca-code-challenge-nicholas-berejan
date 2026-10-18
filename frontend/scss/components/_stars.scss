@@ -1,0 +1,30 @@
+@use "../abstracts" as *;
+
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: token(font-size, base);
+  letter-spacing: 1px;
+}
+
+.stars__star--full {
+  color: token(color, star);
+}
+
+.stars__star--empty {
+  color: token(color, star-empty);
+}
+
+.stars__value {
+  margin-left: token(space, 2);
+  color: token(color, text);
+  font-size: token(font-size, md);
+  font-weight: 600;
+}
+
+.stars__count {
+  margin-left: token(space, 2);
+  color: token(color, muted);
+  font-size: token(font-size, sm);
+}

@@ -1,0 +1,25 @@
+@use "../abstracts" as *;
+
+body {
+  background: token(color, bg);
+  color: token(color, text);
+  font-family: token(font, sans);
+  font-size: 16px;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+
+a {
+  color: token(color, primary);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+}

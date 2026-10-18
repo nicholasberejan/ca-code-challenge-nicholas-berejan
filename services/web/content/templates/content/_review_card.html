@@ -1,0 +1,8 @@
+{% load content_text %}
+<article class="card">
+  <p class="card__meta"><a href="{% url 'brand-detail' review.brand.slug %}">{{ review.brand.name }}</a></p>
+  <h3 class="card__title"><a class="card__title-link" href="{% url 'review-detail' review.slug %}">{{ review.title }}</a></h3>
+  {% stars review.rating show_value=False %}
+  <p class="card__excerpt">{{ review.content|snippet }}</p>
+  <p class="card__meta">{{ review.reviewer.display_name }}{% if review.reviewer_location %}, {{ review.reviewer_location }}{% endif %} &middot; <time datetime="{{ review.published_at|date:'c' }}">{{ review.published_at|date:'j F Y' }}</time></p>
+</article>

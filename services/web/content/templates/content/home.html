@@ -4,15 +4,19 @@
   <div class="container">
     <h1 id="hero-title" class="hero__title">Honest reviews of consumer brands</h1>
     <p class="hero__lead">Independent customer feedback on insurance, telecom, finance, home services, and retail companies.</p>
-    <p><a class="hero__cta" href="{% url 'brand-list' %}">Browse all brands</a></p>
+    <p class="hero__actions"><a class="button" href="{% url 'brand-list' %}">Browse all brands</a></p>
   </div>
 </section>
-<section class="section container" aria-labelledby="recent-title">
-  <h2 id="recent-title">Recent reviews</h2>
-  {% for review in recent_reviews %}
-    {% include "content/_review_summary.html" with show_brand=True excerpt=True %}
-  {% empty %}
-    <p>No reviews yet.</p>
-  {% endfor %}
+<section class="section section--surface" aria-labelledby="recent-title">
+  <div class="container">
+    <h2 id="recent-title" class="section__title">Recent reviews</h2>
+    {% if recent_reviews %}
+      <ul class="grid">
+        {% for review in recent_reviews %}<li>{% include "content/_review_card.html" %}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p>No reviews yet.</p>
+    {% endif %}
+  </div>
 </section>
 {% endblock %}
