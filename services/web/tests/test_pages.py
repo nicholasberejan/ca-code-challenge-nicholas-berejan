@@ -51,7 +51,13 @@ def test_homepage_has_a_hero_and_the_six_newest_reviews(client):
 
     page = html(client.get("/"))
 
-    assert '<section class="hero"' in page and "<h1" in page
+    assert '<section class="hero"' in page
+    assert "Honest reviews of consumer brands</h1>" in page
+    assert (
+        "Independent customer feedback on insurance, telecom, finance, home "
+        "services, and retail companies." in page
+    )
+    assert 'class="hero__cta" href="/brand/"' in page
     assert review_titles(page) == [f"Day {d}" for d in (7, 6, 5, 4, 3, 2)]
     assert "Jenny W." in page
     assert 'href="/brand/acme/"' in page
