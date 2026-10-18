@@ -9,6 +9,11 @@ urlpatterns = [
     path("brand/<slug:slug>/", views.brand_detail, name="brand-detail"),
     path("review/<slug:slug>/", views.review_detail, name="review-detail"),
     path("api/brands/", api.BrandListView.as_view(), name="api-brand-list"),
+    path(
+        "api/brands/<slug:slug>/",
+        api.BrandDetailView.as_view(),
+        name="api-brand-detail",
+    ),
     path("api/industries/", api.IndustryListView.as_view(), name="api-industry-list"),
     path("healthz", health, name="health"),
 ]

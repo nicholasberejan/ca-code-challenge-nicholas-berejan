@@ -1,11 +1,14 @@
 """Public, read-only brand listing API (docs/decisions.md §4)."""
 
 from django.core.paginator import EmptyPage, Paginator
+from django.db import transaction
+from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.utils.urls import remove_query_param, replace_query_param
 from rest_framework.views import APIView
+from shared_auth.drf import CanEditBrands, JWTAuthentication
 
 from content.models import Brand, Industry, Review
 from content.queries import (
@@ -14,6 +17,7 @@ from content.queries import (
     brand_listing,
     rounded_average,
     top_reviews,
+    with_review_stats,
 )
 from content.sanitize import snippet
 from core.api_errors import error_response
@@ -164,3 +168,61 @@ class IndustryListView(APIView):
     def get(self, request: Request) -> Response:
         industries = Industry.objects.order_by("name", "slug")
         return Response(IndustrySerializer(industries, many=True).data)
+
+
+# --- Protected edit ------------------------------------------------------------
+
+EDITABLE_FIELDS = {"short_description"}
+SHORT_DESCRIPTION_MAX_LENGTH = 300
+
+
+class BrandEditSerializer(serializers.Serializer):
+    """The only writable brand field. Plain text: stored as given (trimmed)
+    and escaped when rendered; HTML is not interpreted."""
+
+    short_description = serializers.CharField(
+        max_length=SHORT_DESCRIPTION_MAX_LENGTH, allow_blank=False, trim_whitespace=True
+    )
+
+    def to_internal_value(self, data: object) -> dict[str, str]:
+        if not isinstance(data, dict):
+            raise serializers.ValidationError({"detail": ["Expected a JSON object."]})
+        errors = {
+            name: ["This field cannot be changed."]
+            for name in sorted(set(data) - EDITABLE_FIELDS)
+        }
+        value = data.get("short_description")
+        if "short_description" in data and not isinstance(value, str):
+            errors["short_description"] = ["Must be a string."]
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super().to_internal_value(data)
+
+
+class BrandDetailView(APIView):
+    """PATCH /api/brands/<slug>/: editors change a brand's short description.
+
+    The token is verified locally with the auth service's public key: 401 for
+    a missing or invalid token, 403 without the editor role.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [CanEditBrands]
+
+    def patch(self, request: Request, slug: str) -> Response:
+        brand = get_object_or_404(Brand, slug=slug)
+        edit = BrandEditSerializer(data=request.data)
+        edit.is_valid(raise_exception=True)
+        with transaction.atomic():
+            brand.short_description = edit.validated_data["short_description"]
+            brand.save(update_fields=["short_description"])
+
+        # The same representation as a listing row.
+        row = (
+            with_review_stats(Brand.objects.filter(pk=brand.pk))
+            .prefetch_related("industries")
+            .get()
+        )
+        return Response(
+            BrandListSerializer(row, context={"top_reviews": top_reviews([row])}).data
+        )

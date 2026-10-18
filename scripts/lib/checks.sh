@@ -111,14 +111,56 @@ django_tests() {
   done
 }
 
-# Imports the seeded WordPress content into the web service's database, then
+# Imports the seeded WordPress data into each service's database, then
 # re-imports with --expect-unchanged, which fails (and rolls back) if the
 # second run would create, update or delete anything.
-content_import_idempotency() {
+import_idempotency() {
   start_wordpress_db
   step "WordPress content import, then idempotent re-import (import_wordpress)"
   in_service_with_db web python manage.py import_wordpress
   in_service_with_db web python manage.py import_wordpress --expect-unchanged
+  step "WordPress user import, then idempotent re-import (import_wordpress_users)"
+  in_service_with_db auth python manage.py import_wordpress_users
+  in_service_with_db auth python manage.py import_wordpress_users --expect-unchanged
+}
+
+# The documented token flow against the running web and auth services,
+# including an auth-service outage (scripts/e2e/auth_flow.py).
+e2e_flow() {
+  docker compose run --rm --no-deps -T -v "$REPO_ROOT/scripts/e2e:/e2e:ro" \
+    -v "$E2E_STATE:/state" auth python /e2e/auth_flow.py "$1"
+}
+
+auth_flow_e2e() {
+  step "End-to-end token flow: login, PATCH, 401/403, demotion, replay, logout"
+  run docker compose up -d --wait db main-db auth-db
+  run docker compose up -d web auth
+  run wait_for_services
+  E2E_STATE="$(mktemp -d)"
+  trap 'e2e_flow cleanup >/dev/null 2>&1 || true; docker compose start auth >/dev/null 2>&1 || true; rm -rf "$E2E_STATE"' EXIT
+  run e2e_flow main
+  step "End-to-end: auth service stopped (public reads, PATCH with a valid token)"
+  run docker compose stop auth
+  run e2e_flow outage
+  run docker compose start auth
+  run wait_for_services
+  step "End-to-end: edited description survives import_wordpress"
+  run docker compose exec -T web python manage.py import_wordpress
+  run e2e_flow verify
+  run e2e_flow cleanup
+  trap - EXIT
+  rm -rf "$E2E_STATE"
+}
+
+wait_for_services() {
+  for _ in $(seq 1 60); do
+    if docker compose exec -T web python -c "import urllib.request as u; u.urlopen('http://localhost:8000/healthz'); u.urlopen('http://auth:8001/healthz')" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "web/auth did not become healthy" >&2
+  return 1
 }
 
 # --- Frontend ----------------------------------------------------------------
@@ -146,15 +188,16 @@ frontend_build() {
 
 # --- Deferred ----------------------------------------------------------------
 
-# docs/decisions.md §12 requires both imports to be idempotent. The content
-# import is checked by content_import_idempotency; the auth service's user
-# import does not exist yet. Reported, never passed.
-DEFERRED_CHECKS=(
-  "Auth user import idempotency (import_wordpress_users run twice; second run must create/update nothing): user import not implemented yet"
-)
+# Checks required by the decisions whose feature does not exist yet are listed
+# here and reported, never passed. Currently none.
+DEFERRED_CHECKS=()
 
 report_deferred() {
   finish_step
+  if [ "${#DEFERRED_CHECKS[@]}" -eq 0 ]; then
+    printf '\n==> Deferred checks: none\n'
+    return
+  fi
   printf '\n==> Deferred checks (NOT run, NOT passed)\n'
   for check in "${DEFERRED_CHECKS[@]}"; do
     printf '    - %s\n' "$check"

@@ -1,13 +1,23 @@
 [project]
 name = "shared-auth"
-version = "0.1.0"
+version = "0.2.0"
 description = "Token contract and verification code shared by the web and auth services."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "PyJWT[crypto]>=2.9",
+]
+
+[project.optional-dependencies]
+drf = [
+    "django>=4.2",
+    "djangorestframework>=3.15",
+]
 
 [dependency-groups]
 dev = [
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.16",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",
@@ -27,6 +37,18 @@ addopts = "--strict-markers"
 [tool.mypy]
 strict = true
 files = ["src", "tests"]
+
+# Django and DRF ship no type information. Rather than adding the stubs
+# (and their Django-settings plugin) to a package whose core is
+# Django-free, the optional DRF module treats them as untyped.
+[[tool.mypy.overrides]]
+module = ["django.*", "rest_framework.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["shared_auth.drf", "tests.test_drf"]
+disallow_subclassing_any = false
+disallow_untyped_calls = false
 
 [tool.ruff]
 line-length = 88
