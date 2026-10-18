@@ -1,41 +1,44 @@
 {% extends "base.html" %}
+{% load content_text %}
 {% block title %}{{ brand.name }} | Brand Reviews{% endblock %}
 {% block meta %}<meta name="description" content="{{ brand.short_description }}">{% endblock %}
 {% block content %}
-<article class="brand">
+<article>
   <header class="brand-hero">
     <div class="container">
-      <h1 class="brand-hero__title">{{ brand.name }}</h1>
       {% if industries %}
-        <ul class="brand-hero__industries" aria-label="Industries">
+        <ul class="badge-list" aria-label="Industries">
           {% for industry in industries %}<li class="badge">{{ industry.name }}</li>{% endfor %}
         </ul>
       {% endif %}
-      <p class="brand-hero__rating">
-        {% if brand.review_count %}
-          Rated {{ brand.average_rating|floatformat:1 }} out of 5 from {{ brand.review_count }} review{{ brand.review_count|pluralize }}
-        {% else %}
-          No reviews yet
-        {% endif %}
-      </p>
+      <h1 class="brand-hero__title">{{ brand.name }}</h1>
+      {% if brand.review_count %}
+        <p class="brand-hero__rating">{% stars display_rating %}<span class="stars__count">({{ brand.review_count }} review{{ brand.review_count|pluralize }})</span></p>
+      {% else %}
+        <p class="brand-hero__rating">No reviews yet</p>
+      {% endif %}
       <dl class="brand-meta">
-        {% if brand.website_url %}<div><dt>Website</dt><dd><a href="{{ brand.website_url }}" rel="nofollow noopener">{{ brand.website_url }}</a></dd></div>{% endif %}
-        {% if brand.founded_year %}<div><dt>Founded</dt><dd>{{ brand.founded_year }}</dd></div>{% endif %}
-        {% if brand.headquarters %}<div><dt>Headquarters</dt><dd>{{ brand.headquarters }}</dd></div>{% endif %}
+        {% if brand.headquarters %}<div><dt class="brand-meta__term">Headquarters:</dt><dd class="brand-meta__value">{{ brand.headquarters }}</dd></div>{% endif %}
+        {% if brand.founded_year %}<div><dt class="brand-meta__term">Founded:</dt><dd class="brand-meta__value">{{ brand.founded_year }}</dd></div>{% endif %}
+        {% if brand.website_url %}<div><dt class="brand-meta__term">Website:</dt><dd class="brand-meta__value"><a href="{{ brand.website_url }}" rel="nofollow noopener">{{ brand.website_url }}</a></dd></div>{% endif %}
       </dl>
     </div>
   </header>
-  <div class="brand-body container">
-    {# Sanitized at import (content/sanitize.py); the only HTML rendered as markup. #}
-    <div class="brand-body__content">{{ brand.content|safe }}</div>
-  </div>
-  <section class="reviews-section container" aria-labelledby="reviews-title">
-    <h2 id="reviews-title">Customer reviews</h2>
-    {% for review in reviews %}
-      {% include "content/_review_summary.html" with show_brand=False excerpt=True %}
-    {% empty %}
-      <p>No reviews yet.</p>
-    {% endfor %}
+  <section class="section" aria-label="About {{ brand.name }}">
+    <div class="container">
+      {# Sanitized at import (content/sanitize.py); rendered as markup. #}
+      <div class="content-panel">{{ brand.content|safe }}</div>
+    </div>
+  </section>
+  <section class="reviews-section" aria-labelledby="reviews-title">
+    <div class="container">
+      <h2 id="reviews-title" class="reviews-section__title">Customer reviews</h2>
+      {% for review in reviews %}
+        {% include "content/_review_item.html" %}
+      {% empty %}
+        <p>No reviews yet.</p>
+      {% endfor %}
+    </div>
   </section>
 </article>
 {% endblock %}

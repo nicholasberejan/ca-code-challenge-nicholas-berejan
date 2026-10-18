@@ -1,0 +1,11 @@
+@use "../abstracts" as *;
+
+.container {
+  max-width: token(layout, max-width);
+  margin: 0 auto;
+  padding: 0 token(layout, gutter);
+
+  @include below(sm) {
+    padding: 0 token(space, 4);
+  }
+}

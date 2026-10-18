@@ -1,0 +1,32 @@
+@use "../abstracts" as *;
+
+// Visible keyboard focus everywhere; never removed. Dark teal reaches 3:1+
+// on the light backgrounds; dark surfaces set --focus-ring to a light colour.
+:focus-visible {
+  outline: 3px solid var(--focus-ring, #{token(color, focus)});
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  top: token(space, 2);
+  left: token(space, 2);
+  z-index: 10;
+  padding: token(space, 2) token(space, 4);
+  background: token(color, surface);
+  border-radius: token(radius, sm);
+  transform: translateY(-200%);
+
+  &:focus {
+    transform: none;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

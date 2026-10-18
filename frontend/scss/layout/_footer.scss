@@ -1,0 +1,13 @@
+@use "../abstracts" as *;
+
+.site-footer {
+  margin-top: token(space, 16);
+  padding: token(space, 8) 0;
+  background: token(color, footer-bg);
+  color: token(color, footer-text);
+  font-size: token(font-size, md);
+}
+
+.site-footer__text {
+  margin: 0;
+}

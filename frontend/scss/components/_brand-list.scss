@@ -1,0 +1,68 @@
+@use "../abstracts" as *;
+
+// The React <BrandList /> on /brand/.
+.brand-list__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: token(space, 4);
+  margin-bottom: token(space, 6);
+
+  @include below(sm) {
+    flex-direction: column;
+  }
+}
+
+.brand-list__field {
+  display: flex;
+  flex-direction: column;
+  gap: token(space, 1);
+  min-width: 220px;
+}
+
+.brand-list__label {
+  font-size: token(font-size, sm);
+  font-weight: 600;
+}
+
+.brand-list__select {
+  padding: token(space, 2) token(space, 3);
+  border: 1px solid token(color, border);
+  border-radius: token(radius, sm);
+  background: token(color, surface);
+  color: token(color, text);
+  font: inherit;
+}
+
+.brand-list__heading {
+  margin: 0 0 token(space, 2);
+  font-size: token(font-size, h2);
+}
+
+.brand-list__count {
+  margin: 0 0 token(space, 4);
+  color: token(color, muted);
+  font-size: token(font-size, md);
+}
+
+.brand-list__hint {
+  margin: token(space, 1) 0 0;
+  color: token(color, muted);
+  font-size: token(font-size, sm);
+}
+
+.brand-list__results {
+  transition: opacity 0.15s;
+}
+
+// Previous results stay visible, dimmed, while new ones load.
+.brand-list__results--busy {
+  opacity: 0.5;
+}
+
+.brand-list__message {
+  margin: 0 0 token(space, 4);
+  padding: token(space, 6);
+  border: 1px solid token(color, border);
+  border-radius: token(radius, md);
+  background: token(color, surface);
+}

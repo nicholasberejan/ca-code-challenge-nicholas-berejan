@@ -1,0 +1,40 @@
+@use "../abstracts" as *;
+
+.hero {
+  padding: token(space, 16) 0 token(space, 14);
+  background: linear-gradient(
+    135deg,
+    token(color, primary) 0%,
+    token(color, primary-deep) 100%
+  );
+  color: token(color, on-primary);
+
+  // White focus ring on the dark gradient.
+  --focus-ring: #{token(color, on-primary)};
+
+  @include below(sm) {
+    padding: token(space, 10) 0;
+  }
+}
+
+.hero__title {
+  margin: 0 0 token(space, 3);
+  font-size: token(font-size, display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+
+  @include below(sm) {
+    font-size: token(font-size, title);
+  }
+}
+
+.hero__lead {
+  max-width: 640px;
+  margin: 0;
+  font-size: token(font-size, lg);
+  opacity: 0.92;
+}
+
+.hero__actions {
+  margin: token(space, 6) 0 0;
+}

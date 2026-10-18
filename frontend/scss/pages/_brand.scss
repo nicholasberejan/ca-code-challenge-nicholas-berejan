@@ -1,0 +1,48 @@
+@use "../abstracts" as *;
+
+.brand-hero {
+  padding: token(space, 10) 0;
+  border-bottom: 1px solid token(color, border);
+  background: token(color, surface);
+}
+
+.brand-hero__title {
+  margin: token(space, 3) 0;
+  font-size: token(font-size, h1);
+  letter-spacing: -0.02em;
+}
+
+.brand-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: token(space, 2) token(space, 5);
+  margin: token(space, 4) 0 0;
+  color: token(color, muted);
+  font-size: token(font-size, base);
+}
+
+.brand-meta__term {
+  display: inline;
+  color: token(color, text);
+  font-weight: 600;
+}
+
+.brand-meta__value {
+  display: inline;
+  margin: 0 0 0 token(space, 1);
+}
+
+.brand-hero__rating {
+  margin: 0;
+  color: token(color, muted);
+  font-size: token(font-size, sm);
+}
+
+.reviews-section {
+  padding: token(space, 6) 0 token(space, 16);
+}
+
+.reviews-section__title {
+  margin: 0 0 token(space, 4);
+  font-size: token(font-size, h2);
+}

@@ -1,0 +1,27 @@
+@use "../abstracts" as *;
+
+.review-hero {
+  padding: token(space, 8) 0 token(space, 6);
+  border-bottom: 1px solid token(color, border);
+  background: token(color, surface);
+}
+
+.review-hero__brand-link {
+  color: token(color, primary);
+  font-size: token(font-size, md);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.review-hero__title {
+  margin: token(space, 2) 0 token(space, 3);
+  font-size: token(font-size, title);
+  letter-spacing: -0.01em;
+}
+
+.review-hero__byline {
+  margin: token(space, 2) 0 0;
+  color: token(color, muted);
+  font-size: token(font-size, sm);
+}

@@ -1,1 +1,4 @@
-// pages partials are forwarded here as they are added.
+@forward "home";
+@forward "page";
+@forward "brand";
+@forward "review";

@@ -1,11 +1,16 @@
 @use "sass:map";
 
+// The theme's single responsive breakpoint (max-width: 640px).
 $breakpoints: (
   "sm": 640px,
 );
 
 // The only place media queries are written; partials use this mixin.
 @mixin below($name) {
+  @if not map.has-key($breakpoints, $name) {
+    @error "Unknown breakpoint: #{$name}";
+  }
+
   @media (width <= map.get($breakpoints, $name)) {
     @content;
   }

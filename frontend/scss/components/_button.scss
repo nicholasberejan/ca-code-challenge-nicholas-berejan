@@ -1,0 +1,25 @@
+@use "../abstracts" as *;
+
+// Native <button>s and button-like links (e.g. the hero call to action).
+.button {
+  display: inline-block;
+  padding: token(space, 2) token(space, 4);
+  border: 1px solid token(color, border);
+  border-radius: token(radius, sm);
+  background: token(color, surface);
+  color: token(color, text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: token(color, primary);
+    color: token(color, primary);
+    text-decoration: none;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}

@@ -1,0 +1,17 @@
+@use "../abstracts" as *;
+
+.section {
+  padding: token(space, 12) 0;
+}
+
+.section--surface {
+  background: token(color, surface);
+  border-top: 1px solid token(color, border);
+  border-bottom: 1px solid token(color, border);
+}
+
+.section__title {
+  margin: 0 0 token(space, 6);
+  font-size: token(font-size, h2);
+  letter-spacing: -0.01em;
+}

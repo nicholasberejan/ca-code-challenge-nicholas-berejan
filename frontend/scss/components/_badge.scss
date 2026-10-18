@@ -1,0 +1,22 @@
+@use "../abstracts" as *;
+
+.badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: token(space, 1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid token(color, badge-border);
+  border-radius: token(radius, pill);
+  background: token(color, badge-bg);
+  color: token(color, primary-dark);
+  font-size: token(font-size, xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}

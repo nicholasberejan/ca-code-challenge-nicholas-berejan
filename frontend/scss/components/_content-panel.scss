@@ -1,0 +1,14 @@
+@use "../abstracts" as *;
+
+// Panel for sanitized imported HTML (brand descriptions, review bodies).
+.content-panel {
+  padding: token(space, 8);
+  border: 1px solid token(color, border);
+  border-radius: token(radius, md);
+  background: token(color, surface);
+  font-size: token(font-size, body);
+
+  @include below(sm) {
+    padding: token(space, 5);
+  }
+}

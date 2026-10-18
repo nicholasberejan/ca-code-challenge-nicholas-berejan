@@ -1,11 +1,11 @@
 {% url 'home' as home_url %}{% url 'brand-list' as brands_url %}
 <header class="site-header">
-  <div class="container">
+  <div class="container site-header__inner">
     <a class="site-title" href="{{ home_url }}">Brand Reviews</a>
     <nav class="site-nav" aria-label="Main">
       <ul class="site-nav__list">
-        <li><a href="{{ home_url }}"{% if request.path == home_url %} aria-current="page"{% endif %}>Home</a></li>
-        <li><a href="{{ brands_url }}"{% if request.path == brands_url %} aria-current="page"{% endif %}>Brands</a></li>
+        <li><a class="site-nav__link" href="{{ home_url }}"{% if request.path == home_url %} aria-current="page"{% endif %}>Home</a></li>
+        <li><a class="site-nav__link" href="{{ brands_url }}"{% if request.path == brands_url %} aria-current="page"{% endif %}>Brands</a></li>
       </ul>
     </nav>
   </div>

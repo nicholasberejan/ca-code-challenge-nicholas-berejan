@@ -1,1 +1,5 @@
-// layout partials are forwarded here as they are added.
+@forward "container";
+@forward "header";
+@forward "footer";
+@forward "grid";
+@forward "section";

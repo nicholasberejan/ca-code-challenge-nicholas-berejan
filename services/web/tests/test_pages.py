@@ -19,7 +19,12 @@ def html(response):
 
 
 def review_titles(page):
-    return re.findall(r'class="review-item__title"><a href="[^"]+">([^<]+)</a>', page)
+    """Titles of review cards (homepage) or review items (brand page), in order."""
+    return re.findall(
+        r'class="(?:card|review-item)__title">'
+        r'<a class="[^"]+" href="[^"]+">([^<]+)</a>',
+        page,
+    )
 
 
 # --- Navigation ----------------------------------------------------------------
@@ -57,7 +62,7 @@ def test_homepage_has_a_hero_and_the_six_newest_reviews(client):
         "Independent customer feedback on insurance, telecom, finance, home "
         "services, and retail companies." in page
     )
-    assert 'class="hero__cta" href="/brand/"' in page
+    assert '<a class="button" href="/brand/">Browse all brands</a>' in page
     assert review_titles(page) == [f"Day {d}" for d in (7, 6, 5, 4, 3, 2)]
     assert "Jenny W." in page
     assert 'href="/brand/acme/"' in page
@@ -123,10 +128,32 @@ def test_brand_page_shows_the_brand_and_its_derived_rating(client, acme):
     assert '<meta name="description" content="Short description of acme.">' in page
     assert "<h1" in page and "Acme Insurance</h1>" in page
     assert re.findall(r'<li class="badge">([^<]+)</li>', page) == ["Finance", "Telecom"]
-    assert "Rated 3.9 out of 5 from 12 reviews" in page
+    assert 'aria-label="Rated 3.9 out of 5"' in page
+    assert "(12 reviews)" in page
     assert "1.0" not in page  # the legacy value is never shown
     assert 'href="https://acme.example.com"' in page
-    assert "<dd>1985</dd>" in page and "<dd>Hartford, CT</dd>" in page
+    assert '<dd class="brand-meta__value">1985</dd>' in page
+    assert '<dd class="brand-meta__value">Hartford, CT</dd>' in page
+
+
+@pytest.mark.parametrize(
+    ("ratings", "label", "full"),
+    [
+        ([2] * 17 + [3] * 3, "2.2", 2),  # 43/20 = 2.15, half up
+        ([4] * 11 + [3], "3.9", 3),  # 47/12 = 3.9167
+        ([5] * 19 + [4], "5.0", 4),  # 99/20 = 4.95, rounds up to 5.0
+    ],
+)
+def test_brand_page_rating_rounds_half_up_like_the_cards(client, ratings, label, full):
+    make_brand("rated", ratings=ratings)
+
+    page = html(client.get("/brand/rated/"))
+    rating = page[page.index('class="brand-hero__rating"') :]
+    rating = rating[: rating.index("</p>")]
+
+    assert f'aria-label="Rated {label} out of 5"' in rating
+    assert rating.count("stars__star--full") == full
+    assert rating.count("stars__star--empty") == 5 - full
 
 
 def test_brand_page_renders_the_sanitized_body_as_html(client, acme):
@@ -185,7 +212,7 @@ def test_review_page_shows_the_review(client):
 
     assert 'href="/brand/acme/"' in page and "Back to Acme Insurance" in page
     assert "Slow claim</h1>" in page
-    assert "Rated 2 out of 5" in page
+    assert 'aria-label="Rated 2.0 out of 5"' in page
     assert "By Anna R., Tucson, AZ" in page
     assert '<time datetime="2026-01-01T12:00:00+00:00">1 January 2026</time>' in page
     assert "<p>Took <em>weeks</em>.</p>" in page
@@ -257,8 +284,10 @@ def test_plain_text_fields_are_escaped_and_only_bodies_render_html(client):
 
 
 def test_entity_encoded_markup_in_review_excerpts_stays_escaped(client):
-    # The excerpt is plain text decoded from the stored HTML, so `&lt;script&gt;`
-    # in the body becomes the text "<script>"; only autoescaping keeps it inert.
+    # On the homepage the excerpt is plain text decoded from the stored HTML,
+    # so `&lt;script&gt;` becomes the text "<script>" and only autoescaping
+    # keeps it inert. The brand page renders the full sanitized body, where it
+    # stays an entity.
     brand = make_brand("acme")
     make_review(
         brand,
