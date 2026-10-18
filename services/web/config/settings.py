@@ -32,6 +32,7 @@ JWT_AUDIENCE = require_env("JWT_AUDIENCE")
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "core",
+    "content",
 ]
 
 MIDDLEWARE = [
@@ -50,8 +51,24 @@ DATABASES = {
         "NAME": require_env("POSTGRES_DB"),
         "USER": require_env("POSTGRES_USER"),
         "PASSWORD": require_env("POSTGRES_PASSWORD"),
-    }
+    },
+    # Read-only WordPress source for `import_wordpress` (docs/decisions.md §3).
+    # Only needed when the import runs; startup never connects to it. The
+    # session is opened read-only, so writes fail even with a writable user.
+    "wordpress": {
+        "ENGINE": "django.db.backends.mysql",
+        "HOST": os.environ.get("WP_DB_HOST", ""),
+        "PORT": os.environ.get("WP_DB_PORT", "3306"),
+        "NAME": os.environ.get("WP_DB_NAME", ""),
+        "USER": os.environ.get("WP_DB_USER", ""),
+        "PASSWORD": os.environ.get("WP_DB_PASSWORD", ""),
+        "OPTIONS": {
+            "charset": "utf8mb4",
+            "init_command": "SET SESSION TRANSACTION READ ONLY",
+        },
+    },
 }
+DATABASE_ROUTERS = ["config.routers.WordPressSourceRouter"]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -3,7 +3,7 @@ COMPOSE := docker compose
 WPCLI := $(COMPOSE) run --rm wpcli
 
 .PHONY: help up down restart logs reset wp bootstrap dump status \
-	hooks test verify-fast verify lib-release lock
+	hooks test verify-fast verify lib-release lock import
 
 help:
 	@echo "Targets:"
@@ -16,6 +16,7 @@ help:
 	@echo "  dump            Export current DB to db/dump.sql"
 	@echo "  status          Show running services"
 	@echo ""
+	@echo "  import          Import WordPress content into the main app (needs the db service)"
 	@echo "  hooks           Enable the repository's git hooks (run once per clone)"
 	@echo "  test            Run every test suite"
 	@echo "  verify-fast     Lint, format, types and unit tests (runs on every commit)"
@@ -68,3 +69,7 @@ lib-release:
 
 lock:
 	scripts/lock.sh
+
+import:
+	$(COMPOSE) up -d --wait db
+	$(COMPOSE) run --rm web python manage.py import_wordpress

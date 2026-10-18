@@ -106,7 +106,7 @@ The main app stores no users, passwords, roles or permissions; the auth service 
 
 Related rules:
 
-- A review whose brand is not in the imported source (unpublished or deleted) is skipped and reported, never attached elsewhere.
+- A review whose brand is not in the imported source (unpublished or deleted) is skipped and reported, never attached elsewhere. A skipped review already in Django is treated like any other missing row: kept unchanged (on its previous brand) and reported until `--prune` deletes it. Accepted tradeoff: if WordPress moves a review to an unavailable brand, its old brand keeps showing and counting it until the next `--prune`; in a one-way cutover the final import runs with `--prune`. With more time: a "missing from source" flag that hides such rows from public pages instead of keeping them visible.
 - `Review` → `Reviewer` uses a protecting FK, so a Reviewer can never be deleted while reviews still reference it.
 - The auth service's import never deletes users; users missing from WordPress are only reported. Removing an account is an access-control decision and should be made deliberately (for example by deactivating the user).
 

@@ -143,3 +143,16 @@ implementation steps, and accepted suggestions are intentionally omitted.
 - **Enforcement deliberately deferred.** Invoking the reviewer is an
   instruction in `CLAUDE.md`, not a Stop-hook requirement. A hook will be
   added only if agents are observed skipping the review.
+
+### 2026-10-17: Phase 2 (content import) findings
+
+- **A security test caught the sanitizer library's permissive default.** The
+  first sanitizer passed the approved tag/attribute allowlist to `nh3`, but
+  `nh3` also allows `lang` and `title` on every tag unless told otherwise, so
+  `<a href="…" title="…">` kept its `title`. The XSS/allowlist tests asserted
+  the exact output rather than "no script tag", which is why it surfaced. The
+  sanitizer now passes an empty `"*"` attribute set, and the payload list
+  includes generic attributes.
+- **The read-only guarantee was tested by removing it.** The test that the
+  WordPress connection rejects writes was confirmed to pass only because of
+  the read-only session setting: without it, the same statement is accepted.
