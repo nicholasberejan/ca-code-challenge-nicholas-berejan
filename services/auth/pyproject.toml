@@ -4,9 +4,14 @@ version = "0.0.0"
 description = "Auth Django service: user accounts, credentials, roles and tokens."
 requires-python = ">=3.12"
 dependencies = [
+    "bcrypt>=4.2",
     "django>=5.2,<5.3",
+    "djangorestframework>=3.16",
+    "djangorestframework-simplejwt>=5.5",
+    "mysqlclient>=2.2",
+    "phpserialize>=1.3",
     "psycopg[binary]>=3.2",
-    "shared-auth==0.1.0",
+    "shared-auth==0.2.0",
 ]
 
 [dependency-groups]

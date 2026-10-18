@@ -9,7 +9,7 @@ dependencies = [
     "mysqlclient>=2.2",
     "nh3>=0.2.18",
     "psycopg[binary]>=3.2",
-    "shared-auth==0.1.0",
+    "shared-auth[drf]==0.2.0",
 ]
 
 [dependency-groups]

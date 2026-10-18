@@ -243,3 +243,29 @@ implementation steps, and accepted suggestions are intentionally omitted.
 - **The tests proved the refactor safe without changing.** Because the
   BrandList tests query roles, labels and text rather than component
   structure, all 38 frontend tests passed untouched after the extraction.
+
+### 2026-10-18: Phase 5 (authentication and protected editing) findings
+
+- **The library default that would have broken the design was found by
+  reading it, not by trusting it.** SimpleJWT's refresh copies every claim of
+  the old refresh token into the new tokens, and rotation keeps the same
+  payload, so roles stored at login would have survived demotion
+  indefinitely; its refresh also crashes on a deleted user. The auth service
+  therefore issues its own tokens: refresh tokens carry identity only, and
+  every refresh reloads the user and their current roles. A mutation that
+  restored SimpleJWT's behaviour failed four tests, including the demotion
+  test.
+- **The password hasher was written from WordPress's source, not memory.**
+  Reading `wp-includes/pluggable.php` showed WordPress trims the password
+  when hashing but not when checking; the hasher mirrors the check, and is
+  tested against the seed's real WordPress-generated hashes rather than
+  hashes our own code produced.
+- **The test auditor found two mechanisms with no test behind them.**
+  Removing the locked "already used" check (the guard against two
+  simultaneous refreshes of one token) or ignoring `--expect-unchanged` on
+  the user import (which `verify.sh` relies on) left every test passing.
+  Both now have tests that fail when the mechanism is removed.
+- **The reviewer caught documentation that contradicted the code:** the
+  README still called login and the import unimplemented and listed a
+  deferred check that no longer existed, and the expand-then-contract
+  process for shared-library breaking changes was not written down.

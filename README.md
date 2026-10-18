@@ -26,7 +26,7 @@ The DB is auto-imported from `db/dump.sql` on first boot. No manual setup requir
 
 ## Development (Django replacement site)
 
-The replacement site is being built in phases. What exists today is the foundation: both Django services, their databases, the shared library, the frontend toolchain, and verification. Brands, reviews, the API, pages, login and the WordPress import are not implemented yet.
+The replacement site: the main Django app (public pages, brand API, protected brand editing), the auth service (accounts, roles, tokens), the shared library, the React `<BrandList />` and the SCSS theme, plus the WordPress imports for content and users. See "Public pages and API", "Authentication and editing" and "Migrating WordPress data" below.
 
 | Path | What it is |
 |---|---|
@@ -47,13 +47,14 @@ Both Django services run migrations on start and serve with Django's development
 ```bash
 make hooks         # once per clone: every git commit then runs verify-fast
 make verify-fast   # lint, format, types, unit tests (no databases)
-make verify        # everything: + Django tests on PostgreSQL, Django checks, production build
+make verify        # everything: + Django tests on PostgreSQL, Django checks, both import
+                   # idempotency checks, the end-to-end token flow, production build
 make test          # every test suite
 ```
 
 The commit hook is quiet: one line per check, plus the output of any check that fails. For full output, run `VERIFY_VERBOSE=1 git commit ...`.
 
-All checks run in containers. `make verify` lists checks that are deferred until their feature exists (currently: WordPress import idempotency); deferred checks are reported, never counted as passed.
+All checks run in containers. The end-to-end check (`scripts/e2e/auth_flow.py`) runs against the running `web` and `auth` services: login, PATCH as editor and reader, demotion taking effect at refresh, refresh replay, deactivation, logout, an auth-service outage (it stops and restarts `auth`), and an edit surviving `import_wordpress`. It uses its own test users and restores the brand it edits. Checks whose feature does not exist yet would be listed as deferred, never counted as passed; currently there are none.
 
 ### Frontend and SCSS
 
@@ -80,7 +81,14 @@ make lib-release   # build wheels/shared_auth-<version>-py3-none-any.whl
 make lock          # re-resolve the services' lockfiles after changing their shared-auth pin
 ```
 
-Released versions are immutable: bump `version` in `packages/shared-auth/pyproject.toml` before `make lib-release`. Each service pins an exact version (`shared-auth==0.1.0` in its `pyproject.toml`) and upgrades on its own schedule. See `packages/shared-auth/README.md`.
+Released versions are immutable: bump `version` in `packages/shared-auth/pyproject.toml` before `make lib-release`. Each service pins an exact version (currently `shared-auth==0.2.0` in its `pyproject.toml`) and upgrades on its own schedule. See `packages/shared-auth/README.md`.
+
+**Breaking changes ship expand-then-contract** (the verifier always upgrades before the issuer), so the two services never have to deploy at the same moment:
+
+1. Release a version whose verifier accepts both the old and the new token format.
+2. Deploy the web service (the verifier) on it. Nothing changes yet.
+3. Deploy the auth service (the issuer) on it; it starts issuing the new format.
+4. Once every old token has expired (the refresh lifetime, 1 day), release a version without the old format and move each service to it when convenient.
 
 ## Stack
 
@@ -120,7 +128,7 @@ make wp ARGS="plugin list"   # run wp-cli inside the stack
 make bootstrap  # full re-seed: WP core install + plugin install + content seed
 make dump       # export the current DB to db/dump.sql
 make status     # show running services
-make import     # import WordPress content into the main app (see "Migrating WordPress data")
+make import     # import WordPress content and users (see "Migrating WordPress data")
 make hooks      # enable git hooks (once per clone)
 make verify-fast / make verify / make test   # see "Verification" above
 make lib-release / make lock                 # see "Shared library" above
@@ -215,6 +223,39 @@ The top review is the one whose rating is closest to the brand's average; on an 
 
 Errors: an invalid parameter returns `400` with `{"errors": {"<param>": ["..."]}}` (all invalid parameters at once); a page past the end returns `404` with the same shape.
 
+## Authentication and editing (auth service, port 8001)
+
+The auth service owns accounts, passwords and roles (`reader`, `editor`) and issues RS256 tokens. The main app checks tokens itself with the auth service's public key: it never calls the auth service and stores no users.
+
+```bash
+# Log in: a 5-minute access token and a 1-day refresh token
+TOKENS=$(curl -s -X POST localhost:8001/api/token/ -H 'Content-Type: application/json' \
+  -d '{"username": "admin", "password": "admin"}')
+ACCESS=$(echo "$TOKENS" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access"])')
+REFRESH=$(echo "$TOKENS" | python3 -c 'import json,sys; print(json.load(sys.stdin)["refresh"])')
+
+# Edit a brand's short description (editors only)
+curl -s -X PATCH localhost:8000/api/brands/acme-insurance/ \
+  -H "Authorization: Bearer $ACCESS" -H 'Content-Type: application/json' \
+  -d '{"short_description": "Hartford-based insurer."}'
+
+# New token pair; the old refresh token is used up
+curl -s -X POST localhost:8001/api/token/refresh/ -H 'Content-Type: application/json' \
+  -d "{\"refresh\": \"$REFRESH\"}"
+
+# Log out: that refresh token can no longer be used
+curl -s -X POST localhost:8001/api/token/logout/ -H 'Content-Type: application/json' \
+  -d "{\"refresh\": \"$REFRESH\"}"
+```
+
+- `PATCH /api/brands/<slug>/` accepts only `short_description` (trimmed, 1–300 characters, plain text) and returns the brand in the listing format. No or an invalid token: `401`. A valid token without the `editor` role: `403`. Any other field: `400`.
+- Access tokens carry `sub`, `roles`, `iss`, `aud`, `exp`, `iat`, `jti`. Refresh tokens carry no roles: each refresh reloads the user's current roles, refuses inactive users, and issues a new pair.
+- **Accepted staleness:** a role change or deactivation takes effect at the next refresh, so an access token already issued keeps its roles for at most 5 minutes. Logout and session revocation stop refresh tokens, not issued access tokens.
+- Operators change roles (groups), deactivate users and revoke all of a user's sessions ("Revoke all sessions" action) in the Django admin at <http://localhost:8001/admin/>.
+- **If the auth service is down:** public pages and GET APIs are unaffected, and PATCH keeps working with an unexpired access token; logging in and refreshing fail.
+
+The token contract (algorithm, claim names, roles, permissions) and the verification code live in the shared library, released as `wheels/shared_auth-0.2.0-py3-none-any.whl`: the web service pins `shared-auth[drf]==0.2.0`, the auth service `shared-auth==0.2.0`.
+
 ## Migrating WordPress data into Django
 
 The main app's `import_wordpress` command copies published WordPress content (industries, brands, reviewers, reviews) into the `web` service's PostgreSQL database. It reads the WordPress MariaDB (`db` service) directly over the Compose network, using `WP_DB_HOST`, `WP_DB_NAME`, `WP_DB_USER` and `WP_DB_PASSWORD` from `.env`. The WordPress database is needed only while the command runs; the `web` service starts without it.
@@ -244,4 +285,16 @@ The command prints a summary of created / updated / unchanged / missing rows per
 
 **Scaling.** At 100x the data, the plan is batched reads and `bulk_create(update_conflicts=True)` instead of per-row writes; at the current size, straightforward per-row upserts are clearer.
 
-> **Not implemented yet:** the auth service's `import_wordpress_users` (users, password hashes, roles). `make import` will run both commands once it exists.
+### Users (auth service)
+
+```bash
+docker compose exec auth python manage.py import_wordpress_users   # also run by `make import`
+```
+
+Creates an auth account for every WordPress user: `user_login` becomes the username, plus the email and the WordPress password hash. WordPress `administrator` becomes the `editor` role with access to the auth service's Django admin; `subscriber` and any other role become `reader`.
+
+The user import **only creates**. An account that already exists (matched by WordPress user ID) is never modified, because after cutover the auth service owns roles, passwords and active status: a re-run cannot undo a demotion, a deactivation or an upgraded password. Users missing from WordPress are reported, never deleted.
+
+**Passwords.** Users keep their WordPress passwords. The WordPress 6.8+ `$wp$` hashes are copied as-is and checked by a transitional hasher (`accounts/hashers.py`, mirroring WordPress's `wp_check_password`); on the first successful login Django re-hashes the password with its own hasher. Seed logins: `admin` / `admin` (editor), every other user / `changeme` (reader).
+
+The two imports are independent and can run in either order.

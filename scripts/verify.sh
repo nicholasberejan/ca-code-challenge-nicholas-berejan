@@ -11,10 +11,11 @@ frontend_static_checks
 frontend_tests
 django_checks
 django_tests
-content_import_idempotency
+import_idempotency
+auth_flow_e2e
 frontend_build
 report_deferred
 
 finish_step
-printf '\nFull verification passed (%d check(s) deferred, listed above).\n' \
+printf '\nFull verification passed (%d check(s) deferred).\n' \
   "${#DEFERRED_CHECKS[@]}"

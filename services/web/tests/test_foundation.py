@@ -1,6 +1,7 @@
 """Phase 1 foundation tests for the main web service."""
 
 import os
+import re
 import tomllib
 from importlib.metadata import version
 from pathlib import Path
@@ -52,10 +53,11 @@ def test_frontend_build_output_is_served_as_static_files():
 
 def test_shared_auth_is_installed_at_the_pinned_version():
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())
+    # e.g. "shared-auth[drf]==0.2.0": an exact pin, optional extras.
     pins = [
-        dep.split("==", 1)[1]
+        match.group(1)
         for dep in pyproject["project"]["dependencies"]
-        if dep.startswith("shared-auth==")
+        if (match := re.fullmatch(r"shared-auth(?:\[[a-z,]+\])?==(\S+)", dep))
     ]
 
     assert pins == [version("shared-auth")]

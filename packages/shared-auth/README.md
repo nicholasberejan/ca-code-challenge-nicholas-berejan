@@ -22,4 +22,7 @@ make lib-release   # build the current version's wheel into wheels/
 2. Run `make lib-release`. It builds `wheels/shared_auth-<version>-py3-none-any.whl`
    and refuses to overwrite a version that has already been released.
 3. Each service upgrades on its own schedule by changing its pin
-   (`shared-auth==<version>`) and running `uv lock` for that service.
+   (`shared-auth==<version>`) and running `make lock`.
+
+A breaking change to the token contract ships expand-then-contract, verifier
+(web) before issuer (auth): see "Shared library" in the repository README.
